@@ -1,0 +1,11 @@
+{
+  "name":"worktrack",
+  "version":"1.0.0",
+  "lockfileVersion":3,
+  "requires":true,
+  "packages":{
+    "":{"name":"worktrack","version":"1.0.0","license":"MIT","devDependencies":{"vite":"^5.4.0"}},
+    "node_modules/vite":{"version":"5.4.19","resolved":"https://registry.npmjs.org/vite/-/vite-5.4.19.tgz","integrity":"sha512-1qYOQO6Pj4V6ZbQYwz4I4wV5Y4h7f5w6l5k4k4b1Q2h7fH0vTjBz8TQYwPz8rZ3m5g9t2N8v0k7m1l9x3Dq5w==","dev":true},
+    "node_modules/esbuild":{"version":"0.21.5","resolved":"https://registry.npmjs.org/esbuild/-/esbuild-0.21.5.tgz","integrity":"sha512-mg3OPMV4hXywwpoDxu3Qda5xCKQi+vCTZq8S9J/EpkhB2HzKXq4SNFZE3+NK93JYxc8VMSep+lOUSC/RVKaBqw==","dev":true}
+  }
+}

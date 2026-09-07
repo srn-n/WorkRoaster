@@ -1,0 +1,50 @@
+import { recordMinutes } from './calculations.js';
+
+export const RECORDS_KEY = 'modern_work_hours_tracker_v1';
+export const SETTINGS_KEY = 'modern_work_hours_tracker_v1_settings';
+
+const safeParse = (raw, fallback) => {
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) ?? fallback; }
+  catch { return fallback; }
+};
+
+const migrateRecord = (record) => ({
+  ...record,
+  id: record.id || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)),
+  date: record.date || '',
+  start: record.start || '',
+  cycle: record.cycle || 'Unassigned',
+  workingMinutes: recordMinutes(record),
+  mapNumber: record.mapNumber || '',
+  dayType: record.dayType || '',
+  paymentType: record.paymentType || '',
+  paymentAmount: Number(record.paymentAmount) || 0,
+  notes: record.notes || '',
+});
+
+export function loadRecords() {
+  const raw = safeParse(localStorage.getItem(RECORDS_KEY), []);
+  return (Array.isArray(raw) ? raw : []).map(migrateRecord);
+}
+
+export function saveRecords(records) {
+  localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+}
+
+export function buildBackup(records, settings) {
+  return { app: 'WorkTrack', schemaVersion: 1, exportedAt: new Date().toISOString(), records, settings };
+}
+
+export function parseBackup(jsonText) {
+  const data = JSON.parse(jsonText);
+  if (!data || typeof data !== 'object' || !Array.isArray(data.records)) throw new Error('That file does not contain valid WorkTrack records.');
+  return data;
+}
+
+export function recordsToCsv(records) {
+  const headers = ['Date','Start','Cycle','Working Minutes','Map Number','Day Type','Payment Type','Payment Amount','Notes'];
+  const rows = records.map((r) => [r.date,r.start,r.cycle,recordMinutes(r),r.mapNumber,r.dayType,r.paymentType,r.paymentAmount,r.notes]);
+  const csvCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  return [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\n');
+}
