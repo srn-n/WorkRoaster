@@ -118,9 +118,9 @@ export function shortDateLabel(dateString) {
  * configured cycle length re-buckets every record consistently without
  * anything being stored per record.
  *
- * DEFAULT_CYCLE_ANCHOR ('1970-01-05') is a fixed reference Monday (four
- * days after the Unix epoch, which was a Thursday). All cycle math counts
- * whole cycleLengthDays-sized blocks forward/backward from this date:
+ * DEFAULT_CYCLE_ANCHOR ('1970-01-12') is a fixed reference Monday. All
+ * cycle math counts whole cycleLengthDays-sized blocks forward/backward
+ * from this date:
  *
  *   blockIndex = floor((date - anchor) / cycleLengthDays)
  *   cycleStart = anchor + blockIndex * cycleLengthDays
@@ -134,8 +134,23 @@ export function shortDateLabel(dateString) {
  * not a weekly interpretation. All arithmetic runs in UTC internally so
  * daylight-saving transitions can never shift a date across a cycle
  * boundary.
+ *
+ * Why this specific Monday, and not any other: for a 7-day cycle every
+ * Monday gives the same weeks, but for a 14-day (fortnightly) cycle there
+ * are two possible Monday "parities" — real fortnightly pay cycles fall
+ * on one or the other depending on which week the employer started
+ * paying on, and picking the wrong one silently splits every real pay
+ * period in half. 1970-01-12 was chosen (over the equally-valid
+ * 1970-01-05, exactly one week earlier) because it's the parity that
+ * matches this tracker's actual historical pay records — confirmed by
+ * lining up computed cycles against previously recorded fortnights
+ * (e.g. Mon 29 Jun 2026 – Sun 12 Jul 2026). If this ever needs to change
+ * for a different pay schedule, shift the anchor by ±7 days to flip
+ * fortnightly parity (7-day cycles are unaffected either way; 30-day
+ * cycles will shift their block boundaries, which is harmless since they
+ * have no real-world weekly reference to preserve).
  */
-export const DEFAULT_CYCLE_ANCHOR = '1970-01-05';
+export const DEFAULT_CYCLE_ANCHOR = '1970-01-12';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const VALID_CYCLE_LENGTHS = [7, 14, 30];
 

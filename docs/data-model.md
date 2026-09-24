@@ -43,10 +43,9 @@ cycleStart = anchor + blockIndex * cycleLengthDays
 cycleEnd   = cycleStart + cycleLengthDays - 1
 ```
 
-`anchor` defaults to `DEFAULT_CYCLE_ANCHOR = "1970-01-05"` — a fixed
-reference **Monday** (four days after the Unix epoch, which was a
-Thursday). Because the anchor is a Monday and both 7 and 14 divide evenly
-into a week, this one formula produces:
+`anchor` defaults to `DEFAULT_CYCLE_ANCHOR = "1970-01-12"` — a fixed
+reference **Monday**. Because the anchor is a Monday and both 7 and 14
+divide evenly into a week, this one formula produces:
 
 - **7-day cycles:** the Monday–Sunday week containing the date.
 - **14-day cycles:** two consecutive Monday–Sunday weeks, paired
@@ -59,6 +58,18 @@ can never shift a date into the wrong cycle. The same date, cycle length
 and anchor always resolve to the same cycle — changing
 `payCycleLengthDays` in Settings re-buckets every record's *display*
 grouping instantly, without touching a single stored record.
+
+**Why 1970-01-12 and not some other Monday?** Any Monday gives identical
+7-day weeks, but a 14-day (fortnightly) cycle has two possible Monday
+"parities" — which one is correct depends on which week the employer's
+pay schedule actually starts on, and the wrong choice silently splits
+real fortnightly pay periods in half instead of grouping them together.
+1970-01-12 was picked because it's the parity that matches this
+tracker's real historical fortnights (verified against previously
+recorded pay periods, e.g. Mon 29 Jun 2026 – Sun 12 Jul 2026). To switch
+parity for a different pay schedule, shift the anchor by exactly ±7 days
+— 7-day cycles are unaffected, and 30-day cycles simply shift their
+(otherwise arbitrary) block boundaries.
 
 **What happened to the old `cycle` field?** Records created before this
 feature may still have a manually-typed `cycle` string (e.g. `"24 Aug –
