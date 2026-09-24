@@ -15,7 +15,7 @@
  *     unknown/future fields round-trip untouched.
  * -----------------------------------------------------------------------
  */
-import { recordMinutes } from './calculations.js';
+import { recordMinutes, getCycleForDate } from './calculations.js';
 
 export const RECORDS_KEY = 'modern_work_hours_tracker_v1';
 export const SETTINGS_KEY = 'modern_work_hours_tracker_v1_settings';
@@ -39,6 +39,11 @@ function defaultSettings() {
     schemaVersion: SCHEMA_VERSION,
     currency: 'AUD',
     theme: 'system', // 'system' | 'light' | 'dark'
+    // Pay-cycle length in days: 7 | 14 | 30. Drives calculations.js's
+    // automatic cycle grouping — see getCycleForDate(). 14 (fortnight)
+    // matches the app's original hard-coded assumption, so an upgrade
+    // changes nothing about existing grouping until this is changed.
+    payCycleLengthDays: 14,
     dayTypes: dayTypeLabels.map((label) => ({ id: slugify(label), label, archived: false })),
     paymentTypes: paymentTypeLabels.map((label) => ({ id: slugify(label), label, archived: false })),
     defaults: { dayType: dayTypeLabels[0], paymentType: paymentTypeLabels[0], startTime: '09:00' },
@@ -94,6 +99,7 @@ export function loadSettings() {
     ...stored,
     dayTypes: Array.isArray(stored.dayTypes) && stored.dayTypes.length ? stored.dayTypes : base.dayTypes,
     paymentTypes: Array.isArray(stored.paymentTypes) && stored.paymentTypes.length ? stored.paymentTypes : base.paymentTypes,
+    payCycleLengthDays: [7, 14, 30].includes(Number(stored.payCycleLengthDays)) ? Number(stored.payCycleLengthDays) : base.payCycleLengthDays,
     defaults: { ...base.defaults, ...(stored.defaults || {}) },
   };
 }
@@ -165,7 +171,14 @@ function csvCell(value) {
   return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 }
 
-export function recordsToCSV(records) {
+/**
+ * @param {number} [cycleLengthDays] Current payCycleLengthDays setting,
+ *   used to fill the "Cycle" column with the same automatically
+ *   calculated cycle the rest of the app shows (see
+ *   calculations.js#getCycleForDate). Defaults to 14 (fortnight) if
+ *   omitted, matching the app's default setting.
+ */
+export function recordsToCSV(records, cycleLengthDays = 14) {
   const headers = [
     'Date', 'Start Time', 'Working Hours', 'Working Minutes', 'Duration (min)',
     'Cycle', 'Map Number', 'Day Type', 'Payment Type', 'Payment Amount',
@@ -175,13 +188,14 @@ export function recordsToCSV(records) {
   const rows = records.map((r) => {
     const mins = recordMinutes(r);
     const rate = mins > 0 ? (Number(r.paymentAmount) || 0) / (mins / 60) : 0;
+    const cyc = getCycleForDate(r.date, cycleLengthDays);
     return [
       r.date,
       r.start,
       Math.floor(mins / 60),
       mins % 60,
       mins,
-      r.cycle || 'Unassigned',
+      cyc ? cyc.cycleLabel : 'Unassigned',
       r.mapNumber || '',
       r.dayType || '',
       r.paymentType || '',

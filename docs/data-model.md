@@ -9,7 +9,7 @@ A JSON array. Each record:
   "id": "string",              // stable unique id
   "date": "YYYY-MM-DD",
   "start": "HH:MM",            // 24-hour
-  "cycle": "string",           // free-text pay cycle/fortnight label; "Unassigned" if blank
+  "cycle": "string",           // LEGACY ONLY — see "Pay cycles" below
   "workingMinutes": 142,       // whole minutes — e.g. 2h22m is stored as 142, not 2.22
   "mapNumber": "string",
   "dayType": "string",         // one of settings.dayTypes[].label at time of entry
@@ -26,6 +26,49 @@ a decimal `workingHours` field (e.g. `2.5` for 2h30m) instead of
 never rewritten just to "normalize" it, so nothing is lost or altered by
 opening the app.
 
+## Pay cycles (automatic)
+
+Records no longer carry a manually-typed cycle. Instead, every record's
+pay cycle is *calculated* from its `date` and the `payCycleLengthDays`
+setting, every time it's needed — nothing cycle-related is written back
+to the record. The form only asks for a date; the calculated cycle is
+shown next to it as a live, read-only preview.
+
+The calculation (`calculations.js#getCycleForDate`) is a pure function of
+`(date, cycleLengthDays, anchor)`:
+
+```
+blockIndex = floor((date - anchor) / cycleLengthDays)
+cycleStart = anchor + blockIndex * cycleLengthDays
+cycleEnd   = cycleStart + cycleLengthDays - 1
+```
+
+`anchor` defaults to `DEFAULT_CYCLE_ANCHOR = "1970-01-05"` — a fixed
+reference **Monday** (four days after the Unix epoch, which was a
+Thursday). Because the anchor is a Monday and both 7 and 14 divide evenly
+into a week, this one formula produces:
+
+- **7-day cycles:** the Monday–Sunday week containing the date.
+- **14-day cycles:** two consecutive Monday–Sunday weeks, paired
+  consistently because they're counted from the same fixed anchor.
+- **30-day cycles:** plain 30-day blocks counted from the same anchor —
+  not a weekly interpretation, just a deterministic day count.
+
+All arithmetic runs in UTC internally, so daylight-saving clock changes
+can never shift a date into the wrong cycle. The same date, cycle length
+and anchor always resolve to the same cycle — changing
+`payCycleLengthDays` in Settings re-buckets every record's *display*
+grouping instantly, without touching a single stored record.
+
+**What happened to the old `cycle` field?** Records created before this
+feature may still have a manually-typed `cycle` string (e.g. `"24 Aug –
+6 Sep"`). That field is never deleted or rewritten — it's preserved
+exactly as-is, but the app stops reading it for grouping, sorting or
+totals. If a record's old text no longer matches its freshly computed
+cycle, the record row shows a small "Was: *original text*" note so the
+history stays visible rather than silently disappearing. New records
+never set this field at all.
+
 `dayType` and `paymentType` are stored as the option's **label text**,
 not an id. This mirrors the original tracker's behaviour and is what
 makes archiving (rather than deleting) safe: a record's stored string
@@ -38,6 +81,7 @@ never depends on a settings entry continuing to exist.
   "schemaVersion": 1,
   "currency": "AUD",            // any ISO 4217 code
   "theme": "system",            // "system" | "light" | "dark"
+  "payCycleLengthDays": 14,     // 7 | 14 | 30 — see "Pay cycles (automatic)" above
   "dayTypes": [
     { "id": "day", "label": "Day", "archived": false }
   ],

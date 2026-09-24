@@ -11,6 +11,10 @@
 import * as calc from './calculations.js';
 import * as store from './storage.js';
 import * as opts from './settings.js';
+// export.js pulls in jsPDF (which itself bundles html2canvas/DOMPurify)
+// and ExcelJS — a few hundred KB the core tracker doesn't need just to
+// add a record. Loaded lazily, on first export click, so page load stays
+// light for the common case.
 
 const root = document.getElementById('app');
 
@@ -78,7 +82,7 @@ function renderHeader() {
 }
 
 function renderStats() {
-  const cycles = calc.groupByCycle(state.records);
+  const cycles = calc.groupByCycle(state.records, state.settings.payCycleLengthDays);
   const latest = cycles[0];
   const overallMinutes = calc.totalMinutes(state.records);
   const overallPay = calc.totalPay(state.records);
@@ -224,9 +228,9 @@ function renderForm() {
               <input id="f-start" type="time" required value="${editingRecord ? editingRecord.start : d.startTime}">
             </div>
             <div class="field">
-              <label for="f-cycle">Fortnight / pay cycle</label>
-              <input id="f-cycle" placeholder="e.g. 24 Aug – 6 Sep" value="${editingRecord ? esc(editingRecord.cycle || '') : ''}" list="cycle-suggestions">
-              <datalist id="cycle-suggestions">${[...new Set(state.records.map((r) => r.cycle).filter(Boolean))].map((c) => `<option value="${esc(c)}">`).join('')}</datalist>
+              <label for="f-cycle-preview">Pay cycle</label>
+              <output id="f-cycle-preview" class="rate-output" for="f-date">—</output>
+              <small class="field-help">Calculated automatically from the date and your configured cycle length.</small>
             </div>
           </div>
         </fieldset>
@@ -296,6 +300,14 @@ function renderForm() {
 
 function renderRecordRow(r) {
   const mins = calc.recordMinutes(r);
+  // A record's pay cycle is now shown once, in its group's header — no
+  // need to repeat it per row. Instead, if this record carries a legacy
+  // manually-typed cycle value (from before automatic calculation) that
+  // no longer matches what's computed for it, surface that history
+  // rather than silently dropping it.
+  const computedCycle = r.date ? calc.getCycleForDate(r.date, state.settings.payCycleLengthDays) : null;
+  const legacyCycle = r.cycle && r.cycle !== 'Unassigned' && r.cycle !== (computedCycle ? computedCycle.cycleLabel : null) ? r.cycle : null;
+
   return `
     <li class="record-row" data-id="${r.id}">
       <div class="record-main">
@@ -321,7 +333,7 @@ function renderRecordRow(r) {
         <span class="tag">${esc(r.dayType || 'Unspecified')}</span>
         <span class="tag muted-tag">${esc(r.paymentType || 'Unspecified')}</span>
         ${r.mapNumber ? `<span class="meta-item">Map <b>${esc(r.mapNumber)}</b></span>` : ''}
-        <span class="meta-item">Cycle <b>${esc(r.cycle || 'Unassigned')}</b></span>
+        ${legacyCycle ? `<span class="meta-item legacy-cycle" title="Manually entered before automatic cycles were added">Was <b>${esc(legacyCycle)}</b></span>` : ''}
       </div>
     </li>`;
 }
@@ -339,7 +351,7 @@ function renderRecords() {
       </section>`;
   }
 
-  const cycles = calc.groupByCycle(state.records);
+  const cycles = calc.groupByCycle(state.records, state.settings.payCycleLengthDays);
 
   return `
     <section aria-label="Work records by pay cycle">
@@ -349,12 +361,19 @@ function renderRecords() {
         <div class="cycle-group">
           <div class="cycle-head">
             <div>
-              <span class="cycle-name">${esc(c.key)}</span>
+              <span class="cycle-name">${esc(c.cycleLabel)}</span>
               <span class="cycle-count">${c.records.length} record${c.records.length === 1 ? '' : 's'}</span>
             </div>
-            <div class="cycle-totals">
-              <span>${calc.formatDuration(c.totalMinutes)}</span>
-              <span class="cycle-pay">${money(c.totalPay)}</span>
+            <div class="cycle-head-actions">
+              <div class="cycle-totals">
+                <span>${calc.formatDuration(c.totalMinutes)}</span>
+                <span class="cycle-pay">${money(c.totalPay)}</span>
+              </div>
+              <div class="cycle-export-actions" role="group" aria-label="Export ${esc(c.cycleLabel)}">
+                <button class="icon-btn small" data-cycle-export="pdf" data-cycle-key="${esc(c.key)}" title="Export this cycle as PDF">PDF</button>
+                <button class="icon-btn small" data-cycle-export="jpg" data-cycle-key="${esc(c.key)}" title="Export this cycle as JPG">JPG</button>
+                <button class="icon-btn small" data-cycle-export="xlsx" data-cycle-key="${esc(c.key)}" title="Export this cycle as Excel">Excel</button>
+              </div>
             </div>
           </div>
           <ul class="record-list">
@@ -432,6 +451,15 @@ function renderSettingsModal() {
     <div class="field">
       <label for="s-default-start">Default starting time for new records</label>
       <input id="s-default-start" type="time" value="${state.settings.defaults.startTime}">
+    </div>
+    <div class="field">
+      <label for="s-cycle-length">Pay cycle length</label>
+      <select id="s-cycle-length">
+        <option value="7" ${state.settings.payCycleLengthDays === 7 ? 'selected' : ''}>7 days (weekly)</option>
+        <option value="14" ${state.settings.payCycleLengthDays === 14 ? 'selected' : ''}>14 days (fortnightly)</option>
+        <option value="30" ${state.settings.payCycleLengthDays === 30 ? 'selected' : ''}>30 days</option>
+      </select>
+      <small class="field-help">Every record's pay cycle is calculated automatically from its date and this length — changing it regroups your existing records without changing any stored data.</small>
     </div>`;
 
   const optionsTab = `
@@ -539,6 +567,17 @@ function updateLiveRate() {
   if (out) out.textContent = pay > 0 && mins > 0 ? rate(pay, mins) : '—';
 }
 
+/** Live-updates the read-only "Pay cycle" preview in the form as the
+ *  date field changes, using the same pure calculation the rest of the
+ *  app uses — nothing is written to the record until it's submitted. */
+function updateCyclePreview() {
+  const dateVal = document.getElementById('f-date')?.value;
+  const out = document.getElementById('f-cycle-preview');
+  if (!out) return;
+  const cyc = dateVal ? calc.getCycleForDate(dateVal, state.settings.payCycleLengthDays) : null;
+  out.textContent = cyc ? cyc.cycleLabel : '—';
+}
+
 // ---------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------
@@ -551,7 +590,9 @@ function submitForm(event) {
   const data = {
     date: document.getElementById('f-date').value,
     start: document.getElementById('f-start').value,
-    cycle: document.getElementById('f-cycle').value.trim() || 'Unassigned',
+    // No manual cycle field: the pay cycle is derived automatically from
+    // `date` + settings.payCycleLengthDays (see calculations.js#getCycleForDate)
+    // every time it's displayed, rather than stored per record.
     workingMinutes: calc.durationMinutes(hoursInput, minutesInput),
     mapNumber: document.getElementById('f-map').value.trim(),
     dayType: document.getElementById('f-daytype').value,
@@ -674,9 +715,27 @@ function exportJSON() {
 }
 
 function exportCSV() {
-  const csv = store.recordsToCSV(state.records);
+  const csv = store.recordsToCSV(state.records, state.settings.payCycleLengthDays);
   store.downloadFile(`worktrack-records-${calc.todayString()}.csv`, csv, 'text/csv');
   showToast('CSV downloaded.');
+}
+
+// -- Per-cycle export (PDF / JPG / Excel) --------------------------------
+
+async function handleCycleExport(format, cycleKey) {
+  const cycles = calc.groupByCycle(state.records, state.settings.payCycleLengthDays);
+  const cycle = cycles.find((c) => c.key === cycleKey);
+  if (!cycle) return;
+  try {
+    const options = { currency: state.settings.currency };
+    const exportModule = await import('./export.js');
+    if (format === 'pdf') exportModule.exportCyclePDF(cycle, options);
+    else if (format === 'jpg') exportModule.exportCycleJPG(cycle, options);
+    else if (format === 'xlsx') await exportModule.exportCycleExcel(cycle, options);
+    showToast(`${format.toUpperCase()} downloaded for ${cycle.cycleLabel}.`);
+  } catch (err) {
+    showToast(err.message || 'Export failed.', 'error');
+  }
 }
 
 function handleImport(mode) {
@@ -763,9 +822,14 @@ function wireEvents() {
   });
   ['f-pay', 'f-hours', 'f-minutes'].forEach((id) => document.getElementById(id)?.addEventListener('input', updateLiveRate));
   updateLiveRate();
+  document.getElementById('f-date')?.addEventListener('input', updateCyclePreview);
+  updateCyclePreview();
 
   root.querySelectorAll('[data-action="edit"]').forEach((b) => b.addEventListener('click', () => startEdit(b.dataset.id)));
   root.querySelectorAll('[data-action="delete"]').forEach((b) => b.addEventListener('click', () => deleteRecord(b.dataset.id)));
+  root.querySelectorAll('[data-cycle-export]').forEach((b) =>
+    b.addEventListener('click', () => handleCycleExport(b.dataset.cycleExport, b.dataset.cycleKey))
+  );
 
   document.getElementById('btn-sample-data')?.addEventListener('click', loadSampleData);
 
@@ -808,6 +872,12 @@ function wireEvents() {
   document.getElementById('s-default-start')?.addEventListener('change', (e) => {
     state.settings = { ...state.settings, defaults: { ...state.settings.defaults, startTime: e.target.value } };
     persist();
+  });
+  document.getElementById('s-cycle-length')?.addEventListener('change', (e) => {
+    const days = [7, 14, 30].includes(Number(e.target.value)) ? Number(e.target.value) : 14;
+    state.settings = { ...state.settings, payCycleLengthDays: days };
+    persist();
+    render();
   });
 
   // Data modal

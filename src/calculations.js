@@ -111,37 +111,123 @@ export function shortDateLabel(dateString) {
 }
 
 /**
- * Group records by pay cycle and order the groups by each cycle's
- * EARLIEST record date, most recent start first. The ending date of a
- * cycle is intentionally never consulted — a cycle that starts later
- * always outranks one that starts earlier, even if its own span hasn't
- * finished yet.
+ * Automatic pay-cycle calculation.
+ * -----------------------------------------------------------------------
+ * A cycle is a deterministic function of (date, cycleLengthDays, anchor):
+ * the same inputs always resolve to the same cycle, so changing the
+ * configured cycle length re-buckets every record consistently without
+ * anything being stored per record.
+ *
+ * DEFAULT_CYCLE_ANCHOR ('1970-01-05') is a fixed reference Monday (four
+ * days after the Unix epoch, which was a Thursday). All cycle math counts
+ * whole cycleLengthDays-sized blocks forward/backward from this date:
+ *
+ *   blockIndex = floor((date - anchor) / cycleLengthDays)
+ *   cycleStart = anchor + blockIndex * cycleLengthDays
+ *   cycleEnd   = cycleStart + cycleLengthDays - 1
+ *
+ * Because the anchor is a Monday and 7 and 14 both divide evenly into a
+ * week, this single formula naturally produces Monday-anchored weekly
+ * (7-day) and fortnightly (14-day, two consecutive Mon–Sun weeks) cycles
+ * with no special-casing. For 30-day cycles the same formula is used
+ * as-is — a plain deterministic 30-day block count from the same anchor,
+ * not a weekly interpretation. All arithmetic runs in UTC internally so
+ * daylight-saving transitions can never shift a date across a cycle
+ * boundary.
  */
-export function groupByCycle(records) {
+export const DEFAULT_CYCLE_ANCHOR = '1970-01-05';
+const DAY_MS = 24 * 60 * 60 * 1000;
+const VALID_CYCLE_LENGTHS = [7, 14, 30];
+
+function parseDateUTC(dateString) {
+  const [y, m, d] = String(dateString).split('-').map(Number);
+  return Date.UTC(y, (m || 1) - 1, d || 1);
+}
+
+function formatDateUTC(ms) {
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Human label for a cycle span, e.g. "21 Sep – 27 Sep 2026" or, when it
+ *  crosses a year boundary, "28 Dec 2026 – 3 Jan 2027". */
+function cycleRangeLabel(cycleStart, cycleEnd) {
+  const sameYear = cycleStart.slice(0, 4) === cycleEnd.slice(0, 4);
+  const start = sameYear ? shortDateLabel(cycleStart) : dateLabel(cycleStart);
+  return `${start} – ${dateLabel(cycleEnd)}`;
+}
+
+/**
+ * Resolve which pay cycle a date belongs to. Pure function — no DOM, no
+ * storage. Returns null for a missing/unparseable date so callers can
+ * fall back to an "Unassigned" bucket instead of throwing.
+ */
+export function getCycleForDate(dateString, cycleLengthDays, anchorDateString = DEFAULT_CYCLE_ANCHOR) {
+  if (!dateString) return null;
+  const length = VALID_CYCLE_LENGTHS.includes(Number(cycleLengthDays)) ? Number(cycleLengthDays) : 14;
+  const anchorMs = parseDateUTC(anchorDateString || DEFAULT_CYCLE_ANCHOR);
+  const dateMs = parseDateUTC(dateString);
+  if (!Number.isFinite(dateMs)) return null;
+
+  const diffDays = Math.floor((dateMs - anchorMs) / DAY_MS);
+  const blockIndex = Math.floor(diffDays / length);
+  const cycleStartMs = anchorMs + blockIndex * length * DAY_MS;
+  const cycleEndMs = cycleStartMs + (length - 1) * DAY_MS;
+
+  const cycleStart = formatDateUTC(cycleStartMs);
+  const cycleEnd = formatDateUTC(cycleEndMs);
+  return { cycleStart, cycleEnd, key: cycleStart, cycleLabel: cycleRangeLabel(cycleStart, cycleEnd) };
+}
+
+/**
+ * Group records by their AUTOMATICALLY CALCULATED pay cycle (from each
+ * record's date + the configured cycle length — see getCycleForDate),
+ * and order the groups by cycle start date, most recent first. A record
+ * without a usable date falls into a single "Unassigned" bucket, sorted
+ * last. Any legacy free-text `record.cycle` value is intentionally never
+ * consulted here — it's historical display-only data now (see
+ * docs/data-model.md), not a grouping key.
+ */
+export function groupByCycle(records, cycleLengthDays = 14, anchorDateString = DEFAULT_CYCLE_ANCHOR) {
   const groups = new Map();
+  const UNASSIGNED_KEY = '\u0000unassigned';
+
   for (const record of records) {
-    const key = record.cycle || 'Unassigned';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(record);
+    const cyc = getCycleForDate(record.date, cycleLengthDays, anchorDateString);
+    const key = cyc ? cyc.key : UNASSIGNED_KEY;
+    if (!groups.has(key)) {
+      groups.set(
+        key,
+        cyc
+          ? { key: cyc.key, cycleStart: cyc.cycleStart, cycleEnd: cyc.cycleEnd, cycleLabel: cyc.cycleLabel, records: [] }
+          : { key: UNASSIGNED_KEY, cycleStart: null, cycleEnd: null, cycleLabel: 'Unassigned', records: [] }
+      );
+    }
+    groups.get(key).records.push(record);
   }
 
-  for (const list of groups.values()) {
-    list.sort((a, b) => dateValue(b.date) - dateValue(a.date) || String(b.start || '').localeCompare(String(a.start || '')));
+  for (const group of groups.values()) {
+    group.records.sort((a, b) => dateValue(b.date) - dateValue(a.date) || String(b.start || '').localeCompare(String(a.start || '')));
   }
 
-  const cycleStart = (key) => {
-    const list = groups.get(key);
-    return Math.min(...list.map((r) => dateValue(r.date)));
-  };
+  const ordered = [...groups.values()].sort((a, b) => {
+    if (!a.cycleStart) return 1;
+    if (!b.cycleStart) return -1;
+    return dateValue(b.cycleStart) - dateValue(a.cycleStart);
+  });
 
-  const orderedKeys = [...groups.keys()].sort((a, b) => cycleStart(b) - cycleStart(a));
-
-  return orderedKeys.map((key) => ({
-    key,
-    records: groups.get(key),
-    totalMinutes: groups.get(key).reduce((sum, r) => sum + recordMinutes(r), 0),
-    totalPay: groups.get(key).reduce((sum, r) => sum + (Number(r.paymentAmount) || 0), 0),
-    startDate: cycleStart(key),
+  return ordered.map((group) => ({
+    key: group.key,
+    cycleStart: group.cycleStart,
+    cycleEnd: group.cycleEnd,
+    cycleLabel: group.cycleLabel,
+    records: group.records,
+    totalMinutes: group.records.reduce((sum, r) => sum + recordMinutes(r), 0),
+    totalPay: group.records.reduce((sum, r) => sum + (Number(r.paymentAmount) || 0), 0),
+    startDate: group.cycleStart ? dateValue(group.cycleStart) : 0,
   }));
 }
 
