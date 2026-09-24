@@ -197,6 +197,48 @@ export function getCycleForDate(dateString, cycleLengthDays, anchorDateString = 
   return { cycleStart, cycleEnd, key: cycleStart, cycleLabel: cycleRangeLabel(cycleStart, cycleEnd) };
 }
 
+const MONTH_PREFIXES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/**
+ * Best-effort parse of a legacy free-text cycle label like "Sep 7 to Sep 20"
+ * or "Aug 24 to Sep 06" into { startMonth, startDay, endMonth, endDay }
+ * (1-indexed months). Returns null if the text doesn't match this shape —
+ * callers should treat that as "can't confirm", not "definitely differs".
+ */
+function parseLegacyCycleRange(text) {
+  const m = /^([A-Za-z]{3,9})\s+(\d{1,2})\s+to\s+([A-Za-z]{3,9})\s+(\d{1,2})$/i.exec(String(text || '').trim());
+  if (!m) return null;
+  const startMonth = MONTH_PREFIXES.indexOf(m[1].slice(0, 3).toLowerCase());
+  const endMonth = MONTH_PREFIXES.indexOf(m[3].slice(0, 3).toLowerCase());
+  if (startMonth === -1 || endMonth === -1) return null;
+  return { startMonth: startMonth + 1, startDay: Number(m[2]), endMonth: endMonth + 1, endDay: Number(m[4]) };
+}
+
+/**
+ * Does a legacy free-text cycle label (e.g. "Sep 7 to Sep 20", typed before
+ * automatic cycles existed) describe the SAME period as a computed cycle
+ * (e.g. { cycleStart: "2026-09-07", cycleEnd: "2026-09-20" })? This is a
+ * semantic comparison, not string equality — the two will almost never be
+ * byte-identical (legacy text never carries a year and uses "to" instead of
+ * "–"), so comparing raw strings would flag nearly every legacy record as a
+ * mismatch even when it describes the exact same fortnight. The legacy
+ * text's year is assumed from the computed cycle's own start/end years
+ * (free text never states one), so this only confirms month+day agreement.
+ * Returns false — "does not match", so the caller still surfaces it as a
+ * legacy note — whenever the text doesn't parse or a real caller should
+ * treat as unconfirmed rather than silently trusting a coincidental parse.
+ */
+export function legacyCycleMatchesComputed(legacyText, computedCycle) {
+  if (!legacyText || !computedCycle) return false;
+  const parsed = parseLegacyCycleRange(legacyText);
+  if (!parsed) return false;
+  const startYear = computedCycle.cycleStart.slice(0, 4);
+  const endYear = computedCycle.cycleEnd.slice(0, 4);
+  const parsedStart = `${startYear}-${String(parsed.startMonth).padStart(2, '0')}-${String(parsed.startDay).padStart(2, '0')}`;
+  const parsedEnd = `${endYear}-${String(parsed.endMonth).padStart(2, '0')}-${String(parsed.endDay).padStart(2, '0')}`;
+  return parsedStart === computedCycle.cycleStart && parsedEnd === computedCycle.cycleEnd;
+}
+
 /**
  * Group records by their AUTOMATICALLY CALCULATED pay cycle (from each
  * record's date + the configured cycle length — see getCycleForDate),

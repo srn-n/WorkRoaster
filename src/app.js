@@ -306,7 +306,15 @@ function renderRecordRow(r) {
   // no longer matches what's computed for it, surface that history
   // rather than silently dropping it.
   const computedCycle = r.date ? calc.getCycleForDate(r.date, state.settings.payCycleLengthDays) : null;
-  const legacyCycle = r.cycle && r.cycle !== 'Unassigned' && r.cycle !== (computedCycle ? computedCycle.cycleLabel : null) ? r.cycle : null;
+  // Compare semantically, not as raw strings: legacy text like "Sep 7 to
+  // Sep 20" and the computed label "Sep 7 – Sep 20, 2026" describe the same
+  // period but are never byte-identical, so a strict !== check here would
+  // flag nearly every legacy record as a mismatch. See
+  // calculations.js#legacyCycleMatchesComputed.
+  const legacyCycle =
+    r.cycle && r.cycle !== 'Unassigned' && !(computedCycle && calc.legacyCycleMatchesComputed(r.cycle, computedCycle))
+      ? r.cycle
+      : null;
 
   return `
     <li class="record-row" data-id="${r.id}">
