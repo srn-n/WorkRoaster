@@ -1,4 +1,4 @@
-# WorkTrack
+# WorkRoaster
 
 A simple, personal work-hours and earnings tracker. Log shifts, watch your
 hourly rate calculate itself, and see your pay laid out fortnight by
