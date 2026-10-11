@@ -23,6 +23,9 @@ import { isSupportedCurrency, normalizeCurrencyInput } from './currency.js';
 
 const root = document.getElementById('app');
 
+// Open the profile used last on this device (the first profile if none).
+store.setActiveProfile(store.loadProfiles().active);
+
 const state = {
   records: store.loadRecords(),
   settings: store.loadSettings(),
@@ -529,9 +532,9 @@ function calendarViewMonth() {
 /** The pay cycle the calendar outlines: the one the dashboard graph is
  *  showing (same focusedCycle() lookup), else the cycle containing today. */
 function calendarActiveCycle() {
-  const cycles = calc.groupByCycle(state.records, state.settings.payCycleLengthDays);
+  const cycles = calc.groupByCycle(state.records, state.settings.payCycleLengthDays, state.settings.payCycleAnchor);
   const focused = focusedCycle(cycles);
-  return focused && focused.cycleStart ? focused : calc.getCycleForDate(calc.todayString(), state.settings.payCycleLengthDays);
+  return focused && focused.cycleStart ? focused : calc.getCycleForDate(calc.todayString(), state.settings.payCycleLengthDays, state.settings.payCycleAnchor);
 }
 
 function renderCalendarBody(focusDate = null) {
@@ -785,6 +788,10 @@ const BREAK_CHOICES = [
   { value: 30, label: '30 min' },
   { value: 60, label: '60 min' },
 ];
+// "Monday – Sunday", "Tuesday – Monday", … — weekly pay-cycle start choices.
+const WEEKDAY_LONG = Array.from({ length: 7 }, (_, i) => new Date(2023, 0, 1 + i).toLocaleDateString(undefined, { weekday: 'long' }));
+const CYCLE_START_DAY_CHOICES = [1, 2, 3, 4, 5, 6, 0].map((d) => ({ value: d, label: `${WEEKDAY_LONG[d]} – ${WEEKDAY_LONG[(d + 6) % 7]}` }));
+
 const CYCLE_LENGTH_CHOICES = [
   { value: 7, label: '7 days (weekly)' },
   { value: 14, label: '14 days (fortnightly)' },
@@ -1459,7 +1466,7 @@ function rateBreakdownWidget(r, mins) {
 }
 
 function recordMetaTags(r) {
-  const computedCycle = r.date ? calc.getCycleForDate(r.date, state.settings.payCycleLengthDays) : null;
+  const computedCycle = r.date ? calc.getCycleForDate(r.date, state.settings.payCycleLengthDays, state.settings.payCycleAnchor) : null;
   // Compare semantically, not as raw strings: legacy text like "Sep 7 to
   // Sep 20" and the computed label "Sep 7 – Sep 20, 2026" describe the same
   // period but are never byte-identical, so a strict !== check here would
@@ -1724,7 +1731,7 @@ function toggleCycleGroup(button) {
   const open = !group.classList.contains('is-open');
   const inner = body.querySelector('[data-lazy-cycle]');
   if (open && inner) {
-    const cycle = calc.groupByCycle(state.records, state.settings.payCycleLengthDays).find((c) => c.key === key);
+    const cycle = calc.groupByCycle(state.records, state.settings.payCycleLengthDays, state.settings.payCycleAnchor).find((c) => c.key === key);
     if (cycle) {
       inner.innerHTML = renderCycleBodyContent(cycle);
       inner.removeAttribute('data-lazy-cycle');
@@ -1777,12 +1784,135 @@ function renderOptionRow(field, option, usageCount) {
     </li>`;
 }
 
+// -- Profiles -------------------------------------------------------------
+// Separate workspaces on one device (see storage.js "Profiles"). Switching
+// loads that profile's records, jobs and settings; nothing is shared but
+// the theme.
+
+const profileIndex = () => store.loadProfiles();
+const activeProfile = () => profileIndex().profiles.find((p) => p.id === store.getActiveProfileId()) || profileIndex().profiles[0];
+const hasProfiles = () => profileIndex().profiles.length > 1;
+
+/** "Profile: [Main job ▾]" above the dashboard — only once there are two or more. */
+function renderProfileBar() {
+  if (!hasProfiles()) return '';
+  const { profiles } = profileIndex();
+  return `
+    <div class="profile-bar">
+      <label class="profile-bar-label" for="h-profile">${icon('briefcase', 'icon-sm')}Profile</label>
+      <div class="profile-bar-select">${themedSelect('h-profile', profiles.map((p) => ({ value: p.id, label: p.name })), store.getActiveProfileId(), 'profile')}</div>
+    </div>`;
+}
+
+function switchProfile(id) {
+  if (id === store.getActiveProfileId()) return;
+  discardFormDraft();
+  store.setActiveProfile(id);
+  try { store.rememberActiveProfile(id); } catch { /* storage full — still switch for this visit */ }
+  state.records = store.loadRecords();
+  state.settings = store.loadSettings();
+  state.editingId = null;
+  state.focusedCycleKey = null;
+  state.exportRequest = null;
+  state.formError = '';
+  cycleExpansion.clear();
+  calendarView = null;
+  showToast(`Switched to ${activeProfile().name}.`);
+}
+
+function profilesTab() {
+  const { profiles } = profileIndex();
+  const activeId = store.getActiveProfileId();
+  return `
+    <p class="panel-hint">Profiles keep separate sets of records, jobs and settings on this device — for example your main job with a Monday–Sunday pay cycle and a side job paid Tuesday–Monday. Each has its own history, graph and backups. The theme is shared. A profile isn't a login: anyone using this browser can switch between them.</p>
+    <ul class="option-list profile-list">
+      ${profiles
+        .map((p) => {
+          const count = p.id === activeId ? state.records.length : store.loadRecordsFor(p.id).length;
+          const active = p.id === activeId;
+          return `
+        <li class="option-row" data-profile-id="${esc(p.id)}">
+          <div class="option-info">
+            <span class="option-label">${esc(p.name)}</span>
+            ${active ? '<span class="tag">Current</span>' : ''}
+            <span class="option-usage">${count} record${count === 1 ? '' : 's'}</span>
+          </div>
+          <div class="option-actions">
+            ${active ? '' : `<button class="icon-btn small" type="button" data-profile-action="switch" data-id="${esc(p.id)}" aria-label="Switch to ${esc(p.name)}">Switch</button>`}
+            <button class="icon-btn small" type="button" data-profile-action="rename" data-id="${esc(p.id)}" aria-label="Rename ${esc(p.name)}">Rename</button>
+            ${p.id === store.DEFAULT_PROFILE_ID ? '' : `<button class="icon-btn small danger" type="button" data-profile-action="delete" data-id="${esc(p.id)}" aria-label="Delete ${esc(p.name)}">Delete</button>`}
+          </div>
+        </li>`;
+        })
+        .join('')}
+    </ul>
+    <form class="add-option-row" id="add-profile-form">
+      <input id="new-profile-name" maxlength="40" placeholder="e.g. Side job" aria-label="New profile name" autocomplete="off">
+      <button class="btn secondary" type="submit">Add profile</button>
+    </form>
+    <p class="field-help">The first profile holds the records that were already here and can be renamed but not deleted.</p>`;
+}
+
+function handleProfileAction(action, id) {
+  const profile = profileIndex().profiles.find((p) => p.id === id);
+  if (!profile) return;
+  try {
+    if (action === 'switch') {
+      switchProfile(id);
+      return;
+    }
+    if (action === 'rename') {
+      const next = prompt('Rename profile to:', profile.name);
+      if (next === null) return;
+      if (!next.trim()) return showToast('A profile needs a name.', 'error');
+      store.renameProfile(id, next);
+      showToast(`Renamed to ${next.trim().slice(0, 40)}.`);
+      return;
+    }
+    if (action === 'delete') {
+      const count = id === store.getActiveProfileId() ? state.records.length : store.loadRecordsFor(id).length;
+      if (!confirm(`Delete the profile “${profile.name}” and its ${count} record(s) and jobs from this device? This cannot be undone — download a backup of it first if unsure.`)) return;
+      const wasActive = id === store.getActiveProfileId();
+      store.deleteProfile(id);
+      if (wasActive) {
+        store.setActiveProfile(store.DEFAULT_PROFILE_ID);
+        state.records = store.loadRecords();
+        state.settings = store.loadSettings();
+        state.editingId = null;
+        state.focusedCycleKey = null;
+        cycleExpansion.clear();
+        calendarView = null;
+      }
+      showToast(`Deleted ${profile.name}.`);
+    }
+  } catch {
+    showToast(PERSIST_FAILED_MESSAGE, 'error');
+  }
+}
+
+function addProfile(name) {
+  const clean = String(name || '').trim();
+  if (!clean) return showToast('Type a name for the new profile.', 'error');
+  if (profileIndex().profiles.some((p) => p.name.toLowerCase() === clean.toLowerCase())) return showToast(`There is already a profile called ${clean}.`, 'error');
+  try {
+    // Make sure the current profile is saved under its own keys first.
+    if (!persist()) return;
+    if (!hasProfiles()) store.saveProfiles({ ...profileIndex(), theme: state.settings.theme });
+    const profile = store.createProfile(clean, { theme: state.settings.theme, currency: state.settings.currency });
+    switchProfile(profile.id);
+    showToast(`Added ${profile.name} and switched to it. Set up its jobs and pay cycle in Settings.`);
+  } catch {
+    showToast(PERSIST_FAILED_MESSAGE, 'error');
+  }
+}
+
 const SETTINGS_CATEGORIES = [
   { id: 'general', label: 'General' },
   { id: 'jobs', label: 'Jobs' },
   { id: 'workflow', label: 'Workflow' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'options', label: 'Options' },
+  { id: 'profiles', label: 'Profiles' },
   { id: 'feedback', label: 'Feedback' },
 ];
 
@@ -2067,6 +2197,31 @@ function jobsTab() {
     </form>`;
 }
 
+/** Settings → General: which day the pay cycle starts. Weekly cycles pick
+ *  a weekday; longer cycles pick the date the current cycle started on
+ *  (a weekday alone can't say which week a fortnight starts in). Only
+ *  regroups records — nothing stored on a record changes. */
+function cycleStartField() {
+  const len = state.settings.payCycleLengthDays;
+  const anchor = state.settings.payCycleAnchor;
+  const current = calc.getCycleForDate(calc.todayString(), len, anchor);
+  const help = `<small class="field-help" id="s-cycle-start-help">Current pay cycle: ${esc(current.cycleLabel)}. Changing this regroups your history and graph; no record is changed.</small>`;
+  if (len === 7) {
+    return `
+    <div class="field">
+      <label for="s-cycle-start-day">Pay cycle starts on</label>
+      ${themedSelect('s-cycle-start-day', CYCLE_START_DAY_CHOICES, calc.cycleStartWeekday(anchor), 'pay cycle start day')}
+      ${help}
+    </div>`;
+  }
+  return `
+    <div class="field">
+      <label for="s-cycle-start-date">Current pay cycle started on</label>
+      <input id="s-cycle-start-date" type="date" required value="${current.cycleStart}" aria-describedby="s-cycle-start-help">
+      ${help}
+    </div>`;
+}
+
 /** One Settings category's content pane — used by the full modal render
  *  and by navigateSettingsTab()'s in-place pane swap. */
 function settingsTabContent(tab) {
@@ -2093,6 +2248,7 @@ function settingsTabContent(tab) {
       ${themedSelect('s-cycle-length', CYCLE_LENGTH_CHOICES, state.settings.payCycleLengthDays, 'pay cycle length')}
       <small class="field-help">Every record is grouped from its date. 30- and 365-day cycles are rolling blocks of that many days — not calendar months or calendar years.</small>
     </div>
+    ${cycleStartField()}
     <fieldset class="field-group export-visibility" aria-describedby="s-export-help">
       <legend>Export</legend>
       <p class="field-help" id="s-export-help">What PDF, JPG and Excel reports include. These are the starting choices — you can still change them for each export. JSON backups and CSV always include everything.</p>
@@ -2158,6 +2314,7 @@ function settingsTabContent(tab) {
     </form>`;
 
   if (tab === 'jobs') return jobsTab();
+  if (tab === 'profiles') return profilesTab();
   if (tab === 'feedback') return feedbackTab();
   return { general: generalTab, appearance: appearanceTab, workflow: workflowTab, options: optionsTab }[tab] || generalTab;
 }
@@ -2399,9 +2556,10 @@ function renderDataModal() {
         <div class="modal-body">
           <div class="data-section">
             <h3>${icon('download', 'icon-sm')}Export</h3>
-            <p class="panel-hint">Save a full backup (records + settings), or a spreadsheet-friendly CSV of your records.</p>
+            <p class="panel-hint">${hasProfiles() ? `Save a backup of this profile (${esc(activeProfile().name)}: records, jobs and settings) or of every profile, or a spreadsheet-friendly CSV of this profile's records.` : 'Save a full backup (records + settings), or a spreadsheet-friendly CSV of your records.'}</p>
             <div class="form-actions">
-              <button class="btn secondary" id="btn-export-json" type="button">Download JSON backup</button>
+              <button class="btn secondary" id="btn-export-json" type="button">${hasProfiles() ? `Download backup of ${esc(activeProfile().name)}` : 'Download JSON backup'}</button>
+              ${hasProfiles() ? '<button class="btn secondary" id="btn-export-all-profiles" type="button">Download all profiles</button>' : ''}
               <button class="btn secondary" id="btn-export-csv" type="button" ${state.records.length ? '' : 'disabled'}>Download CSV</button>
             </div>
           </div>
@@ -2546,7 +2704,7 @@ function render() {
   initCanvasMotion();
   // Computed once and handed to both the graph and the pay-cycle history,
   // so they are guaranteed to see the same cycles and the same keys.
-  const cycles = calc.groupByCycle(state.records, state.settings.payCycleLengthDays);
+  const cycles = calc.groupByCycle(state.records, state.settings.payCycleLengthDays, state.settings.payCycleAnchor);
   // The calendar follows the record form's date unless the person has
   // navigated it. The template is built while the previous form is still
   // in the DOM, so a following calendar re-reads the date once the new
@@ -2559,6 +2717,7 @@ function render() {
     <div class="app-shell ${initialRender ? 'is-entering' : ''}">
       ${renderHeader()}
       <main class="app-main" id="main-content">
+        ${renderProfileBar()}
         ${renderStats(cycles)}
         <div class="workspace-grid">
           ${renderForm()}
@@ -2911,7 +3070,7 @@ function updateCyclePreview() {
   const dateVal = document.getElementById('f-date')?.value;
   const out = document.getElementById('f-cycle-preview');
   if (!out) return;
-  const cyc = dateVal ? calc.getCycleForDate(dateVal, state.settings.payCycleLengthDays) : null;
+  const cyc = dateVal ? calc.getCycleForDate(dateVal, state.settings.payCycleLengthDays, state.settings.payCycleAnchor) : null;
   out.textContent = cyc ? cyc.cycleLabel : '—';
 }
 
@@ -3768,7 +3927,7 @@ function submitForm(event, ratesConfirmed = false) {
   // Open the cycle the saved record now belongs to, so an added record —
   // or one whose date change moved it into another cycle — is visible
   // where it landed rather than hidden inside a collapsed group.
-  const savedCycle = calc.getCycleForDate(data.date, state.settings.payCycleLengthDays);
+  const savedCycle = calc.getCycleForDate(data.date, state.settings.payCycleLengthDays, state.settings.payCycleAnchor);
   if (savedCycle) cycleExpansion.set(savedCycle.key, true);
   persist();
   render();
@@ -4059,22 +4218,35 @@ function handleAddJobSubmit(event) {
 
 // -- Data: export / import / reset --------------------------------------
 
+/** "-side-job" in file names once there are several profiles, so backups
+ *  from different profiles can't be mixed up. */
+function profileFileTag() {
+  return hasProfiles() ? `-${(activeProfile().name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'profile').slice(0, 24)}` : '';
+}
+
 function exportJSON() {
-  const backup = store.buildBackup(state.records, state.settings);
-  store.downloadFile(`workroaster-backup-${calc.todayString()}.json`, JSON.stringify(backup, null, 2), 'application/json');
-  showToast('Backup downloaded.');
+  const backup = store.buildBackup(state.records, state.settings, hasProfiles() ? activeProfile().name : null);
+  store.downloadFile(`workroaster-backup${profileFileTag()}-${calc.todayString()}.json`, JSON.stringify(backup, null, 2), 'application/json');
+  showToast(hasProfiles() ? `Backup of ${activeProfile().name} downloaded.` : 'Backup downloaded.');
+}
+
+function exportAllProfilesJSON() {
+  persist();
+  const backup = store.buildAllProfilesBackup();
+  store.downloadFile(`workroaster-backup-all-profiles-${calc.todayString()}.json`, JSON.stringify(backup, null, 2), 'application/json');
+  showToast(`Backup of all ${backup.profiles.length} profiles downloaded.`);
 }
 
 function exportCSV() {
-  const csv = store.recordsToCSV(state.records, state.settings.payCycleLengthDays, state.settings.jobs);
-  store.downloadFile(`workroaster-records-${calc.todayString()}.csv`, csv, 'text/csv');
+  const csv = store.recordsToCSV(state.records, state.settings.payCycleLengthDays, state.settings.jobs, state.settings.payCycleAnchor);
+  store.downloadFile(`workroaster-records${profileFileTag()}-${calc.todayString()}.csv`, csv, 'text/csv');
   showToast('CSV downloaded.');
 }
 
 // -- Per-cycle export (PDF / JPG / Excel) --------------------------------
 
 async function handleCycleExport(format, cycleKey, visibility = state.settings.exportVisibility) {
-  const cycles = calc.groupByCycle(state.records, state.settings.payCycleLengthDays);
+  const cycles = calc.groupByCycle(state.records, state.settings.payCycleLengthDays, state.settings.payCycleAnchor);
   const cycle = cycles.find((c) => c.key === cycleKey);
   if (!cycle) return;
   try {
@@ -4113,13 +4285,13 @@ async function handleFeedbackSubmit() {
 }
 
 function requestCycleExport(format, cycleKey) {
-  const cycle = calc.groupByCycle(state.records, state.settings.payCycleLengthDays).find((c) => c.key === cycleKey);
+  const cycle = calc.groupByCycle(state.records, state.settings.payCycleLengthDays, state.settings.payCycleAnchor).find((c) => c.key === cycleKey);
   if (!cycle) return;
   openExportOptions({ kind: 'cycle', format, cycleKey, scopeLabel: `All records · ${cycle.cycleLabel}` });
 }
 
 function requestJobExport(format, cycleKey, jobKey) {
-  const cycle = calc.groupByCycle(state.records, state.settings.payCycleLengthDays).find((c) => c.key === cycleKey);
+  const cycle = calc.groupByCycle(state.records, state.settings.payCycleLengthDays, state.settings.payCycleAnchor).find((c) => c.key === cycleKey);
   const group = cycle && groupRecordsByJob(cycle.records).find((g) => g.key === jobKey);
   if (!group) return;
   openExportOptions({ kind: 'job', format, cycleKey, jobKey, scopeLabel: `${group.name} · ${cycle.cycleLabel}` });
@@ -4130,7 +4302,7 @@ function requestJobExport(format, cycleKey, jobKey) {
  *  no second export engine, see docs/data-model.md "Jobs" and
  *  export.js's own module comment. */
 async function handleJobExport(format, cycleKey, jobKey, visibility = state.settings.exportVisibility) {
-  const cycles = calc.groupByCycle(state.records, state.settings.payCycleLengthDays);
+  const cycles = calc.groupByCycle(state.records, state.settings.payCycleLengthDays, state.settings.payCycleAnchor);
   const cycle = cycles.find((c) => c.key === cycleKey);
   if (!cycle) return;
   const jobGroup = groupRecordsByJob(cycle.records).find((g) => g.key === jobKey);
@@ -4148,6 +4320,47 @@ async function handleJobExport(format, cycleKey, jobKey, visibility = state.sett
   }
 }
 
+/** An "All profiles" backup: each profile in the file goes into the profile
+ *  with the same name on this device (created if it doesn't exist), using
+ *  the same job-aware import as a single backup. Profiles that aren't in
+ *  the file are left alone. */
+function importAllProfiles(fileProfiles, mode) {
+  const names = fileProfiles.map((p) => p.name).join(', ');
+  if (mode === 'replace' && !confirm(`Replace the records and settings of ${fileProfiles.length} profile(s) (${names}) with this file? Profiles with these names are overwritten and missing ones are created; other profiles are left alone. This cannot be undone — export a backup first if unsure.`)) return;
+  if (!persist()) return;
+  const lines = [];
+  let created = 0;
+  for (const fp of fileProfiles) {
+    let target = profileIndex().profiles.find((p) => p.name.toLowerCase() === fp.name.toLowerCase());
+    let isNew = false;
+    if (!target) {
+      if (!hasProfiles()) store.saveProfiles({ ...profileIndex(), theme: state.settings.theme });
+      target = store.createProfile(fp.name, { theme: state.settings.theme });
+      created += 1;
+      isNew = true;
+    }
+    const current = { records: store.loadRecordsFor(target.id), settings: store.loadSettingsFor(target.id) };
+    // A profile created from the file takes all its settings (pay cycle, currency…), not the blank defaults.
+    const result = store.importBackup(current, fp.parsed, isNew ? 'replace' : mode);
+    store.saveRecordsFor(target.id, result.records);
+    store.saveSettingsFor(target.id, result.settings);
+    lines.push(`${target.name}: ${result.summary.added} record(s)${result.summary.duplicates ? `, ${result.summary.duplicates} duplicate(s) skipped` : ''}`);
+  }
+  state.records = store.loadRecords();
+  state.settings = store.loadSettings();
+  state.modal = null;
+  showToast(`Imported ${fileProfiles.length} profile(s)${created ? ` (${created} new)` : ''} — ${lines.join('; ')}.`);
+}
+
+/** "Imported 6 new record(s); 5 duplicate(s) skipped. Added job: Westfield." */
+function importSummaryMessage(mode, sum) {
+  const parts = [mode === 'replace' ? `Replaced with ${sum.added} imported record(s).` : `Imported ${sum.added} new record(s); ${sum.duplicates} duplicate(s) skipped.`];
+  if (sum.jobsAdded.length) parts.push(`Added job${sum.jobsAdded.length === 1 ? '' : 's'}: ${sum.jobsAdded.join(', ')}.`);
+  if (sum.jobsMatched.length) parts.push(`Matched by name: ${sum.jobsMatched.join(', ')}.`);
+  if (sum.optionsAdded.length) parts.push(`Added option${sum.optionsAdded.length === 1 ? '' : 's'}: ${sum.optionsAdded.join(', ')}.`);
+  return parts.join(' ');
+}
+
 function handleImport(mode) {
   const input = document.getElementById('import-file');
   input.value = '';
@@ -4161,19 +4374,21 @@ function handleImport(mode) {
       const previousRecords = state.records;
       const previousSettings = state.settings;
       try {
-        const { records: incoming, settings: incomingSettings } = store.parseBackup(String(reader.result));
-        if (mode === 'replace') {
-          if (!confirm(`Replace all ${state.records.length} current record(s) with the ${incoming.length} record(s) in this file? This cannot be undone — export a backup first if unsure.`)) return;
-          state.records = incoming;
-          // Imported settings are validated like stored ones, so a damaged or
-          // hand-edited backup can't put the app into a broken state.
-          if (incomingSettings) state.settings = store.normalizeSettings({ ...state.settings, ...incomingSettings });
-          showToast(`Replaced with ${incoming.length} imported record(s).`);
-        } else {
-          const { merged, added } = store.mergeRecords(state.records, incoming);
-          state.records = merged;
-          showToast(`Imported ${added} new record(s); ${incoming.length - added} duplicate(s) skipped.`);
+        const file = store.parseBackupFile(String(reader.result));
+        if (file.kind === 'all') {
+          importAllProfiles(file.profiles, mode);
+          return;
         }
+        const parsed = file.parsed;
+        const into = hasProfiles() ? ` in ${activeProfile().name}` : '';
+        if (mode === 'replace' && !confirm(`Replace all ${state.records.length} current record(s)${into} with the ${parsed.records.length} record(s) in this file? This cannot be undone — export a backup first if unsure.`)) return;
+        // Jobs in the file are created (or matched by name) automatically,
+        // and imported settings are validated like stored ones — see
+        // storage.js#importBackup.
+        const result = store.importBackup({ records: state.records, settings: state.settings }, parsed, mode);
+        state.records = result.records;
+        state.settings = result.settings;
+        showToast(importSummaryMessage(mode, result.summary));
         persist();
         state.modal = null;
         render();
@@ -4305,6 +4520,28 @@ function wireSettingsModalEvents() {
  *  navigateSettingsTab() swaps that pane, never binding the modal's
  *  close/backdrop/rail listeners a second time. */
 function wireSettingsContentEvents() {
+  document.querySelectorAll('[data-profile-action]').forEach((b) =>
+    b.addEventListener('click', () => handleProfileAction(b.dataset.profileAction, b.dataset.id))
+  );
+  document.getElementById('add-profile-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    addProfile(document.getElementById('new-profile-name')?.value);
+  });
+  document.getElementById('s-cycle-start-day')?.addEventListener('change', (e) => {
+    state.settings = { ...state.settings, payCycleAnchor: calc.cycleAnchorForWeekday(Number(e.target.value)) };
+    state.focusedCycleKey = null;
+    persist();
+    render();
+  });
+  document.getElementById('s-cycle-start-date')?.addEventListener('change', (e) => {
+    const value = e.target.value;
+    // Ignore half-typed or cleared dates; only a real date moves the cycles.
+    if (calc.normalizeCycleAnchor(value) !== value) return;
+    state.settings = { ...state.settings, payCycleAnchor: value };
+    state.focusedCycleKey = null;
+    persist();
+    render();
+  });
   wireOptionPickers();
   // Settings → General → Export: the saved starting choices for reports.
   document.querySelectorAll('.export-visibility [data-export-visibility]').forEach((box) =>
@@ -4439,7 +4676,7 @@ function wireSettingsContentEvents() {
  *  the graph also opens that cycle's records, which renderRecords() lists
  *  first by the same key. */
 function focusCycleStep(step, direction) {
-  const cycles = calc.groupByCycle(state.records, state.settings.payCycleLengthDays);
+  const cycles = calc.groupByCycle(state.records, state.settings.payCycleLengthDays, state.settings.payCycleAnchor);
   const current = focusedCycle(cycles);
   const target = current ? cycles[cycles.indexOf(current) + step] : null;
   if (!target) return;
@@ -4589,6 +4826,7 @@ function wireEvents() {
 
   wireRecordControls(root);
   root.querySelectorAll('[data-cycle-toggle]').forEach((b) => b.addEventListener('click', () => toggleCycleGroup(b)));
+  document.getElementById('h-profile')?.addEventListener('change', (e) => switchProfile(e.target.value));
   root.querySelectorAll('[data-cycle-export]').forEach((b) =>
     b.addEventListener('click', () => requestCycleExport(b.dataset.cycleExport, b.dataset.cycleKey))
   );
@@ -4612,6 +4850,7 @@ function wireEvents() {
 
   // Data modal
   document.getElementById('btn-export-json')?.addEventListener('click', exportJSON);
+  document.getElementById('btn-export-all-profiles')?.addEventListener('click', exportAllProfilesJSON);
   document.getElementById('btn-export-csv')?.addEventListener('click', exportCSV);
   document.getElementById('btn-import-merge')?.addEventListener('click', () => handleImport('merge'));
   document.getElementById('btn-import-replace')?.addEventListener('click', () => handleImport('replace'));
@@ -4690,7 +4929,10 @@ function formBusy() {
 
 function syncFromOtherTab(e) {
   if (e.storageArea !== localStorage) return;
-  if (e.key !== null && e.key !== store.RECORDS_KEY && e.key !== store.SETTINGS_KEY) return;
+  const id = store.getActiveProfileId();
+  if (e.key !== null && e.key !== store.recordsKeyFor(id) && e.key !== store.settingsKeyFor(id) && e.key !== store.PROFILES_KEY) return;
+  // This profile was deleted in another tab: fall back to the first one.
+  if (!store.loadProfiles().profiles.some((p) => p.id === id)) store.setActiveProfile(store.DEFAULT_PROFILE_ID);
   state.records = store.loadRecords();
   state.settings = store.loadSettings();
   if (state.editingId && !state.records.some((r) => r.id === state.editingId)) state.editingId = null;

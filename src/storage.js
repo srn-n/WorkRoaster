@@ -15,8 +15,8 @@
  *     unknown/future fields round-trip untouched.
  * -----------------------------------------------------------------------
  */
-import { recordMinutes, getCycleForDate, hasEndTime, normalizeRule, normalizeFixedPay, isFixedPayMode } from './calculations.js';
-import { normalizeJob, findJob } from './jobs.js';
+import { recordMinutes, getCycleForDate, hasEndTime, normalizeRule, normalizeFixedPay, isFixedPayMode, dateRuleKind, normalizeCycleAnchor, DEFAULT_CYCLE_ANCHOR } from './calculations.js';
+import { normalizeJob, findJob, makeJobId } from './jobs.js';
 
 export const RECORDS_KEY = 'modern_work_hours_tracker_v1';
 export const SETTINGS_KEY = 'modern_work_hours_tracker_v1_settings';
@@ -45,6 +45,10 @@ function defaultSettings() {
     // matches the app's original hard-coded assumption, so an upgrade
     // changes nothing about existing grouping until this is changed.
     payCycleLengthDays: 14,
+    // A date that started a pay cycle; every cycle is counted from it. The
+    // default is a Monday, giving Monday–Sunday weeks / fortnights — the
+    // grouping the app always used, so nothing changes until it's set.
+    payCycleAnchor: DEFAULT_CYCLE_ANCHOR,
     // How the Pay section of the record form is entered: "payment" (type
     // in the final amount, hourly rate is calculated — the original
     // behaviour) or "hourlyRate" (type in a rate, payment is calculated).
@@ -205,19 +209,121 @@ function migrateRecord(record) {
   return migrated;
 }
 
+// ---------------------------------------------------------------------
+// Profiles — separate workspaces (records, jobs and settings each) on one
+// device. The first profile is the data that was always here: it keeps the
+// original two keys, so nothing moves and older versions still read it.
+// Other profiles store under the same keys plus "__<profile id>". The list
+// of profiles (and the theme, which all profiles share) lives in
+// PROFILES_KEY, which only exists once a second profile has been made.
+// ---------------------------------------------------------------------
+export const PROFILES_KEY = 'modern_work_hours_tracker_v1_profiles';
+export const DEFAULT_PROFILE_ID = 'default';
+export const DEFAULT_PROFILE_NAME = 'My profile';
+let activeProfileId = DEFAULT_PROFILE_ID;
+
+export const recordsKeyFor = (id) => (id === DEFAULT_PROFILE_ID ? RECORDS_KEY : `${RECORDS_KEY}__${id}`);
+export const settingsKeyFor = (id) => (id === DEFAULT_PROFILE_ID ? SETTINGS_KEY : `${SETTINGS_KEY}__${id}`);
+
+/** { active, profiles: [{ id, name }], theme? } — always at least the first profile. */
+export function loadProfiles() {
+  const raw = safeParse(localStorage.getItem(PROFILES_KEY), null);
+  const list = Array.isArray(raw?.profiles)
+    ? raw.profiles
+        .filter((p) => isObject(p) && typeof p.id === 'string' && /^[a-z0-9-]+$/.test(p.id))
+        .map((p) => ({ id: p.id, name: typeof p.name === 'string' && p.name.trim() ? p.name.trim().slice(0, 40) : 'Profile' }))
+    : [];
+  if (!list.some((p) => p.id === DEFAULT_PROFILE_ID)) list.unshift({ id: DEFAULT_PROFILE_ID, name: DEFAULT_PROFILE_NAME });
+  const active = list.some((p) => p.id === raw?.active) ? raw.active : DEFAULT_PROFILE_ID;
+  const out = { active, profiles: list };
+  if (['system', 'light', 'dark'].includes(raw?.theme)) out.theme = raw.theme;
+  return out;
+}
+
+export function saveProfiles(index) {
+  localStorage.setItem(PROFILES_KEY, JSON.stringify(index));
+}
+
+export const getActiveProfileId = () => activeProfileId;
+
+/** Which profile loadRecords / saveRecords / loadSettings / saveSettings use. */
+export function setActiveProfile(id) {
+  activeProfileId = loadProfiles().profiles.some((p) => p.id === id) ? id : DEFAULT_PROFILE_ID;
+  return activeProfileId;
+}
+
+/** Add a profile (empty records; settings start from the defaults with the
+ *  current theme and currency). Returns the new profile. */
+export function createProfile(name, { theme, currency } = {}) {
+  const index = loadProfiles();
+  const clean = String(name || '').trim().slice(0, 40) || 'New profile';
+  const ids = index.profiles.map((p) => p.id);
+  let id = slugify(clean).slice(0, 24) || 'profile';
+  if (id === DEFAULT_PROFILE_ID || ids.includes(id)) {
+    let n = 2;
+    while (ids.includes(`${id}-${n}`)) n += 1;
+    id = `${id}-${n}`;
+  }
+  const profile = { id, name: clean };
+  const settings = normalizeSettings({ ...(theme ? { theme } : {}), ...(currency ? { currency } : {}) });
+  localStorage.setItem(recordsKeyFor(id), '[]');
+  localStorage.setItem(settingsKeyFor(id), JSON.stringify({ ...settings, schemaVersion: SCHEMA_VERSION }));
+  saveProfiles({ ...index, profiles: [...index.profiles, profile], ...(theme ? { theme } : {}) });
+  return profile;
+}
+
+export function renameProfile(id, name) {
+  const index = loadProfiles();
+  const clean = String(name || '').trim().slice(0, 40);
+  if (!clean) return false;
+  saveProfiles({ ...index, profiles: index.profiles.map((p) => (p.id === id ? { ...p, name: clean } : p)) });
+  return true;
+}
+
+/** Permanently remove a profile and its data. The first profile and the
+ *  last remaining one can't be deleted. */
+export function deleteProfile(id) {
+  const index = loadProfiles();
+  if (id === DEFAULT_PROFILE_ID || index.profiles.length < 2 || !index.profiles.some((p) => p.id === id)) return false;
+  localStorage.removeItem(recordsKeyFor(id));
+  localStorage.removeItem(settingsKeyFor(id));
+  const profiles = index.profiles.filter((p) => p.id !== id);
+  saveProfiles({ ...index, profiles, active: index.active === id ? DEFAULT_PROFILE_ID : index.active });
+  if (activeProfileId === id) activeProfileId = DEFAULT_PROFILE_ID;
+  return true;
+}
+
+/** Remember which profile opens next time (per device). */
+export function rememberActiveProfile(id) {
+  if (!localStorage.getItem(PROFILES_KEY) && id === DEFAULT_PROFILE_ID) return;
+  saveProfiles({ ...loadProfiles(), active: id });
+}
+
+/** Records / settings of any profile (for "All profiles" backups). */
+export function loadRecordsFor(id) {
+  const raw = safeParse(localStorage.getItem(recordsKeyFor(id)), []);
+  return (Array.isArray(raw) ? raw : []).map(migrateRecord);
+}
+export function loadSettingsFor(id) {
+  const settings = normalizeSettings(safeParse(localStorage.getItem(settingsKeyFor(id)), null));
+  const theme = loadProfiles().theme;
+  return theme ? { ...settings, theme } : settings;
+}
+
 export function loadRecords() {
-  const raw = safeParse(localStorage.getItem(RECORDS_KEY), []);
-  const list = Array.isArray(raw) ? raw : [];
-  return list.map(migrateRecord);
+  return loadRecordsFor(activeProfileId);
+}
+
+export function saveRecordsFor(id, records) {
+  localStorage.setItem(recordsKeyFor(id), JSON.stringify(records));
 }
 
 export function saveRecords(records) {
-  localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+  saveRecordsFor(activeProfileId, records);
 }
 
 export function loadSettings() {
-  const stored = safeParse(localStorage.getItem(SETTINGS_KEY), null);
-  return normalizeSettings(stored);
+  return loadSettingsFor(activeProfileId);
 }
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -253,6 +359,7 @@ export function normalizeSettings(stored) {
     dayTypes: normalizeOptionList(stored.dayTypes, base.dayTypes),
     paymentTypes: normalizeOptionList(stored.paymentTypes, base.paymentTypes),
     payCycleLengthDays: [7, 14, 30, 365].includes(Number(stored.payCycleLengthDays)) ? Number(stored.payCycleLengthDays) : base.payCycleLengthDays,
+    payCycleAnchor: normalizeCycleAnchor(stored.payCycleAnchor),
     payCalculationMode: ['payment', 'hourlyRate'].includes(stored.payCalculationMode) ? stored.payCalculationMode : base.payCalculationMode,
     calculateDurationFromEndTime:
       typeof stored.calculateDurationFromEndTime === 'boolean' ? stored.calculateDurationFromEndTime : base.calculateDurationFromEndTime,
@@ -286,8 +393,15 @@ export function normalizeSettings(stored) {
   };
 }
 
+export function saveSettingsFor(id, settings) {
+  localStorage.setItem(settingsKeyFor(id), JSON.stringify({ ...settings, schemaVersion: SCHEMA_VERSION }));
+}
+
 export function saveSettings(settings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...settings, schemaVersion: SCHEMA_VERSION }));
+  saveSettingsFor(activeProfileId, settings);
+  // The theme is shared by all profiles once there is more than one.
+  const index = localStorage.getItem(PROFILES_KEY) ? loadProfiles() : null;
+  if (index && index.theme !== settings.theme && ['system', 'light', 'dark'].includes(settings.theme)) saveProfiles({ ...index, theme: settings.theme });
 }
 
 export function makeOptionId(label) {
@@ -298,14 +412,100 @@ export function makeOptionId(label) {
 // Backup / restore
 // ---------------------------------------------------------------------
 
-export function buildBackup(records, settings) {
+export function buildBackup(records, settings, profileName = null) {
+  const jobs = Array.isArray(settings?.jobs) ? settings.jobs : [];
   return {
     app: 'WorkRoaster',
     schemaVersion: SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
-    records,
+    ...(profileName ? { profile: profileName } : {}),
+    records: records.map((r) => backupRecord(r, jobs)),
     settings,
   };
+}
+
+/** One file with every profile on this device: { profiles: [{ name, records, settings }] }. */
+export function buildAllProfilesBackup() {
+  const { profiles } = loadProfiles();
+  return {
+    app: 'WorkRoaster',
+    schemaVersion: SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    profiles: profiles.map((p) => {
+      const settings = loadSettingsFor(p.id);
+      const one = buildBackup(loadRecordsFor(p.id), settings);
+      return { name: p.name, records: one.records, settings };
+    }),
+  };
+}
+
+/**
+ * Parse any WorkRoaster backup: a single-profile file (records + settings,
+ * optionally naming its profile) or an "All profiles" file. Each profile is
+ * validated exactly like a single backup — all-or-nothing.
+ * Returns { kind: 'single', parsed, profileName } or
+ *         { kind: 'all', profiles: [{ name, parsed }] }.
+ */
+export function parseBackupFile(jsonText) {
+  let data;
+  try {
+    data = JSON.parse(jsonText);
+  } catch {
+    throw new Error('That file is not valid JSON.');
+  }
+  if (isPlainObject(data) && Array.isArray(data.profiles) && !Array.isArray(data.records)) {
+    if (!data.profiles.length) throw new Error('That backup has no profiles in it. Nothing was imported.');
+    return {
+      kind: 'all',
+      profiles: data.profiles.map((p, i) => {
+        const name = isPlainObject(p) && typeof p.name === 'string' && p.name.trim() ? p.name.trim().slice(0, 40) : `Profile ${i + 1}`;
+        try {
+          return { name, parsed: parseBackup(JSON.stringify(p)) };
+        } catch (err) {
+          throw new Error(`Profile “${name}”: ${err.message}`);
+        }
+      }),
+    };
+  }
+  const parsed = parseBackup(jsonText);
+  const profileName = isPlainObject(data) && typeof data.profile === 'string' && data.profile.trim() ? data.profile.trim().slice(0, 40) : null;
+  return { kind: 'single', parsed, profileName };
+}
+
+/**
+ * Which weekend rule a record's `weekendRuleAtEntry` came from, worked out
+ * from fields the record already stores (its date and `weekendOverride`):
+ *   "saturday" / "sunday"            the job's own Saturday / Sunday rule
+ *   "saturday-override" / "sunday-override" / "weekday-override"
+ *                                    a custom rule chosen for that shift
+ *   "none"                           no weekend rule applied
+ * Only for records saved against a job; null otherwise. Informational —
+ * import never reads it, so it can't change any pay.
+ */
+export function weekendRuleSourceOf(record) {
+  if (!record || !record.jobId || !record.weekendRuleAtEntry) return null;
+  const kind = dateRuleKind(record.date);
+  const mode = record.weekendOverride?.mode;
+  if (mode === 'custom') return `${kind}-override`;
+  if (mode === 'none') return 'none';
+  return kind === 'weekday' ? 'none' : kind;
+}
+
+/** One record as written into a backup file: the stored record plus a
+ *  readable `jobName` and `weekendRuleSource`, so the file explains itself
+ *  without the app. The legacy free-text `cycle` field is only written
+ *  when it actually holds something (very old records); the default
+ *  "Unassigned" looked like a job problem to anyone reading the file. */
+function backupRecord(record, jobs) {
+  const out = { ...record };
+  if (out.cycle === 'Unassigned' || !out.cycle) delete out.cycle;
+  if (record.jobId) {
+    const job = findJob(jobs, record.jobId);
+    if (job && job.name) out.jobName = job.name;
+  }
+  const source = weekendRuleSourceOf(record);
+  if (source) out.weekendRuleSource = source;
+  return out;
 }
 
 /**
@@ -350,7 +550,7 @@ export function backupRecordProblem(record) {
   if (!isBlank(record.hourlyRate) && (!finiteNumber(record.hourlyRate) || Number(record.hourlyRate) < 0)) return 'its hourly rate is not a valid amount';
   if (!isBlank(record.end) && (typeof record.end !== 'string' || !TIME_RE.test(record.end))) return 'its end time is not a valid HH:MM time';
   if (!isBlank(record.id) && typeof record.id !== 'string' && typeof record.id !== 'number') return 'its id is not text';
-  for (const key of ['notes', 'dayType', 'paymentType', 'mapNumber', 'jobId', 'cycle']) {
+  for (const key of ['notes', 'dayType', 'paymentType', 'mapNumber', 'jobId', 'jobName', 'cycle']) {
     if (!isBlank(record[key]) && typeof record[key] !== 'string' && typeof record[key] !== 'number') return `its ${key} field is not text`;
   }
   return null;
@@ -399,7 +599,147 @@ export function parseBackup(jsonText) {
   return {
     records: data.records.map(migrateRecord),
     settings: isPlainObject(data.settings) ? data.settings : null,
+    // Readable job name written next to each record by newer backups (see
+    // buildBackup) — lets import put a record under the right job even
+    // when the file's job list is missing it.
+    jobNames: data.records.map((r) => (typeof r.jobName === 'string' && r.jobName.trim() ? r.jobName.trim() : null)),
   };
+}
+
+// ---------------------------------------------------------------------
+// Import: put a backup's records under the right jobs
+// ---------------------------------------------------------------------
+
+const nameKey = (name) => String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+/** The fields that make two records "the same shift", whatever their ids. */
+function shiftKey(r) {
+  return [r.date, r.start, r.end || '', recordMinutes(r), Number(r.breakMinutes) || 0, Number(r.paymentAmount) || 0, r.jobId || ''].join('|');
+}
+
+/** Add any day-type / payment-type options the device doesn't have yet
+ *  (matched by label, ignoring case), keeping the device's own list and order. */
+function mergeOptionList(existing, incoming) {
+  const list = Array.isArray(existing) ? [...existing] : [];
+  const added = [];
+  const have = new Set(list.map((o) => nameKey(o.label)));
+  const ids = new Set(list.map((o) => o.id));
+  for (const o of Array.isArray(incoming) ? incoming : []) {
+    if (!o || typeof o.label !== 'string' || !o.label.trim() || have.has(nameKey(o.label))) continue;
+    let id = typeof o.id === 'string' && o.id && !ids.has(o.id) ? o.id : slugify(o.label);
+    while (ids.has(id)) id = `${id}-2`;
+    list.push({ id, label: o.label.trim(), archived: o.archived === true });
+    have.add(nameKey(o.label));
+    ids.add(id);
+    added.push(o.label.trim());
+  }
+  return { list, added };
+}
+
+/**
+ * Bring a parsed backup into the app. Jobs come with it automatically:
+ * every job in the file is matched to a job on this device with the same
+ * id and name, otherwise one with the same name (ignoring case and extra
+ * spaces), otherwise it is created from the file's own settings (pay
+ * method, base rate, Saturday / Sunday / additional rules, salary) — so a
+ * fresh device needs no setup. An existing job is never overwritten, and
+ * every record keeps the rates it was saved with. A record with no job
+ * stays "No job".
+ *
+ *   mode "merge"   adds the file's records to the device's, skipping any
+ *                  already there (same id, or same date, times, hours,
+ *                  pay and job); the device's settings are kept, plus any
+ *                  jobs and day / payment types it was missing.
+ *   mode "replace" uses the file's records and settings (as before), and
+ *                  still links records by job name where needed.
+ *
+ * Pure: returns { records, settings, summary } and changes nothing itself.
+ */
+export function importBackup(current, parsed, mode) {
+  const fileSettings = parsed.settings && isPlainObject(parsed.settings) ? parsed.settings : null;
+  const fileJobs = Array.isArray(fileSettings?.jobs) ? fileSettings.jobs.filter(isPlainObject).map(normalizeJob) : [];
+  let settings = mode === 'replace' && fileSettings ? normalizeSettings({ ...current.settings, ...fileSettings }) : normalizeSettings(current.settings);
+  const jobs = [...settings.jobs];
+  const summary = { added: 0, duplicates: 0, jobsAdded: [], jobsMatched: [], optionsAdded: [] };
+  const idMap = new Map(); // file job id -> job id on this device
+
+  const findByName = (name) => jobs.find((j) => nameKey(j.name) === nameKey(name) && nameKey(name));
+  const createJob = (template) => {
+    const job = normalizeJob({ ...template, id: makeJobId(template.name || 'job', jobs.map((j) => j.id)) });
+    jobs.push(job);
+    summary.jobsAdded.push(job.name);
+    return job;
+  };
+
+  if (mode !== 'replace') {
+    for (const fj of fileJobs) {
+      const sameId = jobs.find((j) => j.id === fj.id);
+      if (sameId && nameKey(sameId.name) === nameKey(fj.name)) {
+        idMap.set(fj.id, sameId.id);
+        continue;
+      }
+      const byName = findByName(fj.name);
+      if (byName) {
+        idMap.set(fj.id, byName.id);
+        summary.jobsMatched.push(byName.name);
+      } else {
+        idMap.set(fj.id, createJob(fj).id);
+      }
+    }
+  }
+
+  // Records: point each at the right job on this device.
+  const incoming = parsed.records.map((r, i) => {
+    if (!r.jobId) return r;
+    if (idMap.has(r.jobId)) return { ...r, jobId: idMap.get(r.jobId) };
+    if (jobs.some((j) => j.id === r.jobId)) return r;
+    // A job the file's list doesn't describe: use the readable name newer
+    // backups write next to the record.
+    const name = parsed.jobNames?.[i];
+    if (!name) return r;
+    const job =
+      findByName(name) ||
+      createJob({
+        name,
+        payCalculationMode: r.fixedPayAtEntry ? r.fixedPayAtEntry.mode : r.hourlyRate !== undefined ? 'hourlyRate' : 'payment',
+        baseRate: r.baseRateAtEntry ?? r.hourlyRate ?? 0,
+        fixedPay: r.fixedPayAtEntry,
+      });
+    idMap.set(r.jobId, job.id);
+    return { ...r, jobId: job.id };
+  });
+
+  settings = { ...settings, jobs };
+  if (mode !== 'replace' && fileSettings) {
+    const day = mergeOptionList(settings.dayTypes, fileSettings.dayTypes);
+    const pay = mergeOptionList(settings.paymentTypes, fileSettings.paymentTypes);
+    settings = { ...settings, dayTypes: day.list, paymentTypes: pay.list };
+    summary.optionsAdded = [...day.added, ...pay.added];
+  }
+
+  let records;
+  if (mode === 'replace') {
+    records = incoming;
+    summary.added = incoming.length;
+  } else {
+    records = [...current.records];
+    const ids = new Set(records.map((r) => r.id));
+    const keys = new Set(records.map(shiftKey));
+    for (const r of incoming) {
+      const key = shiftKey(r);
+      if (ids.has(r.id) || keys.has(key)) {
+        summary.duplicates += 1;
+        continue;
+      }
+      records.push(r);
+      ids.add(r.id);
+      keys.add(key);
+      summary.added += 1;
+    }
+  }
+  summary.jobsAdded = [...new Set(summary.jobsAdded)];
+  summary.jobsMatched = [...new Set(summary.jobsMatched)];
+  return { records, settings: normalizeSettings(settings), summary };
 }
 
 /** Merge imported records into the current set, skipping duplicate ids. */
@@ -456,7 +796,7 @@ const CSV_NUMERIC_COLUMNS = new Set([2, 3, 4, 9, 10]);
  *   column. Omitting it (or a record having no jobId) simply yields an
  *   empty Job cell — the column is purely additive and never required.
  */
-export function recordsToCSV(records, cycleLengthDays = 14, jobs = []) {
+export function recordsToCSV(records, cycleLengthDays = 14, jobs = [], cycleAnchor = DEFAULT_CYCLE_ANCHOR) {
   const headers = [
     'Date', 'Start Time', 'Working Hours', 'Working Minutes', 'Duration (min)',
     'Cycle', 'Map Number', 'Day Type', 'Payment Type', 'Payment Amount',
@@ -466,7 +806,7 @@ export function recordsToCSV(records, cycleLengthDays = 14, jobs = []) {
   const rows = records.map((r) => {
     const mins = recordMinutes(r);
     const rate = mins > 0 ? (Number(r.paymentAmount) || 0) / (mins / 60) : 0;
-    const cyc = getCycleForDate(r.date, cycleLengthDays);
+    const cyc = getCycleForDate(r.date, cycleLengthDays, cycleAnchor);
     const job = r.jobId ? findJob(jobs, r.jobId) : null;
     return [
       r.date,

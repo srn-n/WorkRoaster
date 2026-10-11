@@ -103,7 +103,7 @@ export const GUIDE_SECTIONS = [
       {
         title: 'Pay-cycle length is app-wide',
         keywords: 'pay cycle configuration per job fortnight',
-        body: `<p>Jobs don't have their own pay-cycle settings — cycle length is one setting for the whole app (Settings → General). See <em>Pay cycles</em>.</p>`,
+        body: `<p>Jobs don't have their own pay-cycle settings — cycle length and start day are one setting for the whole profile (Settings → General). If a job is paid on a different cycle, give it its own profile. See <em>Pay cycles</em> and <em>Profiles</em>.</p>`,
       },
       {
         title: 'Editing a job',
@@ -317,7 +317,17 @@ export const GUIDE_SECTIONS = [
       {
         title: 'What a pay cycle is',
         keywords: 'pay cycle period fortnight weekly length',
-        body: `<p>A pay cycle is the period one pay covers. Set its length in <strong>Settings → General</strong>: 7, 14, 30 or 365 days. Each record's cycle is worked out from its date — weekly and fortnightly cycles start on a Monday. 30- and 365-day cycles are rolling blocks of that many days, not calendar months or years (a 30-day cycle can run, say, 15 Sep – 14 Oct). Changing the length just regroups the display; records themselves aren't changed.</p>`,
+        body: `<p>A pay cycle is the period one pay covers. Set its length in <strong>Settings → General</strong>: 7, 14, 30 or 365 days. Each record's cycle is worked out from its date — by default weekly and fortnightly cycles start on a Monday. 30- and 365-day cycles are rolling blocks of that many days, not calendar months or years (a 30-day cycle can run, say, 15 Sep – 14 Oct). Changing the length just regroups the display; records themselves aren't changed.</p>`,
+      },
+      {
+        title: 'Choosing when your pay cycle starts',
+        keywords: 'pay cycle start day tuesday monday week begins fortnight start date anchor',
+        body: `<p>In <strong>Settings → General</strong>, under the pay-cycle length:</p>
+          <ul>
+            <li><strong>Weekly:</strong> in <em>Pay cycle starts on</em>, pick the weekday your pay week begins, e.g. <em>Tuesday – Monday</em>.</li>
+            <li><strong>Fortnightly, 30 or 365 days:</strong> in <em>Current pay cycle started on</em>, pick the date your current cycle started. Later and earlier cycles follow on from it, so this also sets which week of a fortnight you're in.</li>
+          </ul>
+          <p>The line underneath shows the current cycle so you can check it. Changing the start only regroups records in the history, graph and exports — no record is changed. The default is Monday.</p>`,
       },
       {
         title: 'The dashboard: your visual overview',
@@ -374,12 +384,14 @@ export const GUIDE_SECTIONS = [
       {
         title: 'All records: JSON backup and CSV',
         keywords: 'backup json csv all records spreadsheet',
-        body: `<p><strong>Backup &amp; export</strong> (top of the page) offers a <strong>JSON backup</strong> — every record plus your settings and jobs — and a <strong>CSV</strong> of all records for spreadsheets.</p>`,
+        body: `<p><strong>Backup &amp; export</strong> (top of the page) offers a <strong>JSON backup</strong> — every record plus your settings and jobs — and a <strong>CSV</strong> of all records for spreadsheets. Each record in a backup also names its job and which weekend rule it was paid at (Saturday, Sunday, an override, or none), so the file is readable on its own. With more than one profile, the backup and CSV cover the open profile, and <em>Download all profiles</em> saves every profile in one file.</p>`,
       },
       {
         title: 'Restoring from a backup',
         keywords: 'import restore merge replace backup file',
-        body: `<p>In Backup &amp; export, <em>Import &amp; merge</em> adds records from a JSON backup, skipping ones you already have. <em>Import &amp; replace all</em> replaces your records (and settings) with the file's contents — it asks first.</p>
+        body: `<p>In Backup &amp; export, <em>Import &amp; merge</em> adds records from a JSON backup, skipping ones you already have — including the same shift entered separately on another device. <em>Import &amp; replace all</em> replaces your records (and settings) with the file's contents — it asks first.</p>
+          <p><strong>Jobs come with the backup.</strong> Any job in the file that you don't have yet is added to Settings → Jobs with its pay method, base rate, Saturday/Sunday and additional rules, and salary. A job you already have with the same name (capitals and spaces don't matter) is reused and <em>not</em> changed — your own rates stay. Imported records always keep the rates they were paid at. Records that had no job stay as <em>No job</em>. Day and payment types you don't have yet are added too. If your rates have changed since, edit or rename the job afterwards.</p>
+          <p>An all-profiles backup restores each profile by name, creating any that are missing. Anything else is imported into the profile that's open.</p>
           <p>Every record in the file is checked first (a real date and start time, more than 0 minutes of working time, a valid break and payment). If anything is wrong, WorkRoaster tells you which record and why, and imports nothing — your current records stay exactly as they were. Backups made by older versions of the app still import.</p>`,
       },
     ],
@@ -407,7 +419,13 @@ export const GUIDE_SECTIONS = [
       {
         title: 'Changes never rewrite history',
         keywords: 'settings change job change history preserved',
-        body: `<p>Changing settings or editing a job affects what you do next — never what's already saved. Saved records keep their rates, salary, mode and pay. Changing the pay-cycle length only regroups how records are displayed.</p>`,
+        body: `<p>Changing settings or editing a job affects what you do next — never what's already saved. Saved records keep their rates, salary, mode and pay. Changing the pay-cycle length or start day only regroups how records are displayed.</p>`,
+      },
+      {
+        title: 'Profiles: separate workspaces',
+        keywords: 'profile profiles workspace side job side hustle switch separate rename delete',
+        body: `<p>A <strong>profile</strong> is a separate set of records, jobs and settings (including the pay cycle) on this device — for example your main job with a Monday–Sunday cycle and a side hustle paid Tuesday–Monday. Add one in <strong>Settings → Profiles</strong>; once there are two, a <strong>Profile</strong> switcher appears at the top of the page. The theme is shared.</p>
+          <p>The records you already had are the first profile, <em>My profile</em>. It can be renamed but not deleted. Deleting any other profile asks first and permanently erases its records, jobs and settings, so download a backup before you do. A profile isn't a login: anyone using this browser can switch between them.</p>`,
       },
     ],
   },

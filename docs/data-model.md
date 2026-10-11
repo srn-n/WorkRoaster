@@ -134,7 +134,8 @@ cycleStart = anchor + blockIndex * cycleLengthDays
 cycleEnd   = cycleStart + cycleLengthDays - 1
 ```
 
-`anchor` defaults to `DEFAULT_CYCLE_ANCHOR = "1970-01-12"` — a fixed
+`anchor` is the `payCycleAnchor` setting (see "Pay cycle start" below),
+which defaults to `DEFAULT_CYCLE_ANCHOR = "1970-01-12"` — a fixed
 reference **Monday**. Because the anchor is a Monday and both 7 and 14
 divide evenly into a week, this one formula produces:
 
@@ -422,6 +423,7 @@ direct-payment workflow changes when no job is selected.
   "currency": "AUD",            // an active ISO 4217 code (src/currency.js); see below
   "theme": "system",            // "system" | "light" | "dark"
   "payCycleLengthDays": 14,     // 7 | 14 | 30 | 365 — see "Pay cycles (automatic)" above
+  "payCycleAnchor": "1970-01-12", // YYYY-MM-DD any day a cycle starts on — see "Pay cycle start"
   "payCalculationMode": "payment", // "payment" | "hourlyRate" — see "Pay calculation mode" above
   "calculateDurationFromEndTime": false, // see "Ending time (optional)" above
   "dayTypes": [
@@ -485,6 +487,56 @@ already stored by an older version is never rewritten on load — amounts
 keep the label the user has been seeing — and Settings shows a note
 asking them to pick a valid code.
 
+## Pay cycle start — `payCycleAnchor`
+
+`payCycleAnchor` is the `anchor` of the cycle formula above: any date on
+which a cycle starts. A missing or invalid value (not a real `YYYY-MM-DD`)
+falls back to `DEFAULT_CYCLE_ANCHOR` (`calculations.js#normalizeCycleAnchor`),
+so older settings keep Monday-based cycles exactly as before.
+
+Settings → General asks for it in the way that fits the cycle length:
+
+- **7 days:** a weekday. `cycleAnchorForWeekday(0–6)` turns it into the
+  first such day on or after 1970-01-12 (Tuesday → `1970-01-13`), and
+  `cycleStartWeekday(anchor)` reads it back.
+- **14 / 30 / 365 days:** the date the *current* cycle started. That date
+  itself is stored; because the formula counts in whole cycles from the
+  anchor both ways, every past and future cycle follows from it.
+
+Every grouping (`groupByCycle`, `getCycleForDate`), the graph, history,
+cycle exports and CSV pass `state.settings.payCycleAnchor`. Changing it
+regroups the display only; no record is written.
+
+## Profiles
+
+A profile is a separate set of records and settings. The index lives in
+`localStorage["modern_work_hours_tracker_v1_profiles"]`:
+
+```jsonc
+{
+  "active": "side-job",                 // the profile opened on load
+  "profiles": [
+    { "id": "default", "name": "My profile" },
+    { "id": "side-job", "name": "Side job" } // id: [a-z0-9-], ≤ 24 chars, from the name
+  ],
+  "theme": "dark"                        // shared by every profile
+}
+```
+
+- The `default` profile uses the **original keys** (`…_v1` and
+  `…_v1_settings`), so existing data is the first profile with no
+  migration. Other profiles use `…_v1__<id>` and `…_v1_settings__<id>`.
+- The index is only written once a second profile is created; a
+  single-profile user's storage is exactly as before. A missing or broken
+  index reads as just the default profile; an unknown `active` id falls
+  back to `default`.
+- `default` can be renamed but not deleted. Deleting another profile
+  removes both of its keys.
+- `theme` is shared: `saveSettings` also writes it to the index, and
+  `loadSettingsFor` overlays it on each profile's own settings.
+- Two open tabs listen to the active profile's keys and the index; if the
+  open profile is deleted in another tab, the page falls back to `default`.
+
 ## Backups (JSON import)
 
 `storage.js#parseBackup` validates the whole file **before** anything is
@@ -511,6 +563,60 @@ aren't proper objects are dropped (a list that isn't a list is replaced by
 the default), and a bad `defaults.startTime` becomes 09:00. If anything
 still fails while the import is applied, the records and settings are put
 back exactly as they were.
+
+### What a backup contains
+
+`buildBackup` writes `{ app, schemaVersion, exportedAt, profile?, records,
+settings }`. `profile` (the profile's name) is only present when there is
+more than one profile. Each record is written as stored, plus two
+read-only labels that make the file understandable on its own:
+
+- `jobName` — the name of the record's job at export time (records without
+  a job have none).
+- `weekendRuleSource` — which rule `weekendRuleAtEntry` came from:
+  `saturday`, `sunday`, `saturday-override`, `sunday-override`,
+  `weekday-override` or `none` (`storage.js#weekendRuleSourceOf`).
+
+The legacy `"cycle": "Unassigned"` (and empty `cycle`) is no longer
+written; an old hand-typed cycle label is kept. Stored records are never
+changed by an export, and the extra labels are ignored on import except
+`jobName` (below).
+
+An **all-profiles** backup is `{ app, schemaVersion, exportedAt,
+profiles: [{ name, records, settings }] }`. `parseBackupFile` tells the
+two apart; each profile is validated like a single backup (errors start
+with `Profile “name”:`) and an empty `profiles` list is rejected.
+
+### How importing applies a backup — `importBackup`
+
+`storage.js#importBackup(current, parsed, mode)` is pure: it returns
+`{ records, settings, summary }` and the app saves them.
+
+- **Replace:** records become the file's; settings are the file's,
+  normalised over the current ones.
+- **Merge:** the device's own settings are kept. Each job in the file is
+  matched to a device job by **same id and same name**, otherwise by
+  **name** (trimmed, spaces collapsed, case-insensitive). A match is
+  reused **as-is** — never overwritten. Anything unmatched is added with
+  all of its settings (pay mode, base rate, Saturday/Sunday/additional
+  rules, salary), under a new id if its id is taken by a different job.
+  No prompts and no "Westfield 2".
+- Records are re-pointed at the matched or added job. A record whose job
+  isn't in the file's settings but has a `jobName` is matched by that
+  name, or a minimal job is rebuilt from its own rate snapshot. Records
+  without a job stay without one. Snapshots (`baseRateAtEntry`,
+  `weekendRuleAtEntry`, `paymentAmount`…) are never changed.
+- Merge skips records already present by `id` **or** by content
+  (date, start, end, minutes, break, pay and resolved job), so the same
+  shift entered on two devices is only kept once.
+- Merge adds `dayTypes` / `paymentTypes` whose labels the device doesn't
+  have (case-insensitive).
+- `summary` = `{ added, duplicates, jobsAdded, jobsMatched, optionsAdded }`,
+  shown as the import toast.
+
+All-profiles imports match each profile by name (case-insensitive) and
+import into it in the chosen mode. A profile the device doesn't have is
+created and given the file's settings in full (pay cycle, currency…).
 
 ## If you change the schema
 

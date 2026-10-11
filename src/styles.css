@@ -1678,3 +1678,10 @@ button.calendar-day { border: 0; margin: 0; font-family: inherit; text-align: le
 .export-defaults-note { margin: 10px 0 0; }
 .export-minimal-note { margin: 6px 0 0; }
 .export-actions { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Profile switcher — only shown once there are two or more profiles */
+.profile-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.profile-bar-label { display: inline-flex; align-items: center; gap: 6px; font: var(--text-label); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+.profile-bar-label .icon { color: var(--accent-text); }
+.profile-bar-select { width: min(280px, 100%); }
+.profile-list .tag { margin-left: 6px; }

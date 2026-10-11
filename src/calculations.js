@@ -206,6 +206,28 @@ export function shortDateLabel(dateString) {
  * have no real-world weekly reference to preserve).
  */
 export const DEFAULT_CYCLE_ANCHOR = '1970-01-12';
+
+/** The date a pay cycle starts on, as saved in Settings ("payCycleAnchor"),
+ *  or the default Monday when it's missing or not a real date. Any date
+ *  that started a pay cycle works: cycles are counted forward and back
+ *  from it in whole cycle-length blocks. */
+export function normalizeCycleAnchor(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return DEFAULT_CYCLE_ANCHOR;
+  const ms = parseDateUTC(value);
+  return Number.isFinite(ms) && formatDateUTC(ms) === value ? value : DEFAULT_CYCLE_ANCHOR;
+}
+
+/** Anchor for weekly cycles that start on a given weekday (0 = Sunday … 6 =
+ *  Saturday): the first such day on or after the default Monday. */
+export function cycleAnchorForWeekday(weekday) {
+  const offset = (((Number(weekday) - 1) % 7) + 7) % 7;
+  return formatDateUTC(parseDateUTC(DEFAULT_CYCLE_ANCHOR) + offset * DAY_MS);
+}
+
+/** Weekday (0 = Sunday … 6 = Saturday) a cycle anchored on `anchor` starts on. */
+export function cycleStartWeekday(anchor) {
+  return new Date(parseDateUTC(normalizeCycleAnchor(anchor))).getUTCDay();
+}
 const DAY_MS = 24 * 60 * 60 * 1000;
 const VALID_CYCLE_LENGTHS = [7, 14, 30, 365];
 
@@ -255,7 +277,7 @@ export function getCycleForDate(dateString, cycleLengthDays, anchorDateString = 
 
 function computeCycleForDate(dateString, cycleLengthDays, anchorDateString) {
   const length = VALID_CYCLE_LENGTHS.includes(Number(cycleLengthDays)) ? Number(cycleLengthDays) : 14;
-  const anchorMs = parseDateUTC(anchorDateString || DEFAULT_CYCLE_ANCHOR);
+  const anchorMs = parseDateUTC(normalizeCycleAnchor(anchorDateString));
   const dateMs = parseDateUTC(dateString);
   if (!Number.isFinite(dateMs)) return null;
 
