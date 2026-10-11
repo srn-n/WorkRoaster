@@ -162,5 +162,4 @@ easy to review:
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE). Replace `[Your Name]` in that file with
-your own name (or organisation) before publishing.
+MIT — see [`LICENSE`](LICENSE).
