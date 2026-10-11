@@ -2,7 +2,7 @@
 
 A simple, personal work-hours and earnings tracker. Log shifts, watch your
 hourly rate calculate itself, and see your pay laid out fortnight by
-fortnight — no account, no server, no spreadsheet.
+fortnight all having with multiple profile for different paycycle.
 
 > Simple personal work tracker + earnings dashboard. Not enterprise HR
 > software, not payroll software, not an accounting tool.
@@ -39,8 +39,9 @@ fortnight — no account, no server, no spreadsheet.
 
 ## Screenshots
 
-_Add a screenshot of your dashboard here once you've made it your own —
-e.g. `docs/screenshot-dashboard.png`._
+<img width="1452" height="1287" alt="image" src="https://github.com/user-attachments/assets/0af72858-cb79-4646-8646-58e225737554" />
+
+
 
 ## Getting started
 
