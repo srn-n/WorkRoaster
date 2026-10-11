@@ -5,7 +5,7 @@ hourly rate calculate itself, and see your pay laid out fortnight by
 fortnight all having with multiple profile for different paycycle.
 
 > Simple personal work tracker + earnings dashboard. Not enterprise HR
-> software, not payroll software, not an accounting tool.
+> software, not payroll software, not an accounting tool. A complete guide section has also been added for better understanding of every feature that is currently available.
 
 ## Features
 
@@ -40,6 +40,14 @@ fortnight all having with multiple profile for different paycycle.
 ## Screenshots
 
 <img width="1452" height="1287" alt="image" src="https://github.com/user-attachments/assets/0af72858-cb79-4646-8646-58e225737554" />
+
+<img width="985" height="883" alt="image" src="https://github.com/user-attachments/assets/fcd44029-e4a7-435a-9aaa-d9323e491fa9" />
+
+<img width="982" height="862" alt="image" src="https://github.com/user-attachments/assets/ca525de4-4dad-45ba-918f-edc04a59a747" />
+
+<img width="1080" height="957" alt="image" src="https://github.com/user-attachments/assets/5b46b3d0-91b0-4fb5-a08d-67c317f03b29" />
+
+
 
 
 
