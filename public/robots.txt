@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://workroasterbysamiiiur.vercel.app/sitemap.xml

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#f3eee5" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#171614" media="(prefers-color-scheme: dark)" />
+  <meta name="description" content="WorkRoaster — a personal work-hours, pay-cycle and earnings tracker." />
+  <!-- Link previews (Open Graph / Twitter). Absolute URLs are required by
+       the crawlers; the image is public/og-image.png (1200×630). -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="WorkRoaster" />
+  <meta property="og:title" content="WorkRoaster — Your Personal Work &amp; Pay Ledger" />
+  <meta property="og:description" content="Log shifts across your jobs and see what you earned in each pay cycle — hourly, per task or salaried. No account needed: your data stays in your browser." />
+  <meta property="og:url" content="https://workroasterbysamiiiur.vercel.app/" />
+  <meta property="og:image" content="https://workroasterbysamiiiur.vercel.app/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="WorkRoaster — your personal work and pay ledger" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="WorkRoaster — Your Personal Work &amp; Pay Ledger" />
+  <meta name="twitter:description" content="Log shifts across your jobs and see what you earned in each pay cycle — hourly, per task or salaried. No account needed: your data stays in your browser." />
+  <meta name="twitter:image" content="https://workroasterbysamiiiur.vercel.app/og-image.png" />
+  <!-- Simplified, recolored version of the in-app brand mark (see
+       brandMark() in app.js): the same circle + clock-hands geometry, in
+       the current warm/olive identity instead of the old cyan/near-black
+       one. Flattened to a solid accent badge (rather than the app's
+       transparent currentColor stroke) so it stays legible at 16px
+       regardless of the browser's own chrome theme. -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 36 36%22><rect width=%2236%22 height=%2236%22 rx=%229%22 fill=%22%239a682b%22/><circle cx=%2218%22 cy=%2218%22 r=%2210.5%22 fill=%22none%22 stroke=%22%23fffdf9%22 stroke-width=%222.6%22/><path d=%22M18 18V9.8%22 stroke=%22%23fffdf9%22 stroke-width=%222.6%22 stroke-linecap=%22round%22/><path d=%22M18 18L24.6 18%22 stroke=%22%23fffdf9%22 stroke-width=%222.6%22 stroke-linecap=%22round%22/><circle cx=%2218%22 cy=%2218%22 r=%222.1%22 fill=%22%23fffdf9%22/></svg>" />
+  <!-- No external font is loaded: this is a localStorage-only, offline-
+       capable app, so typography relies entirely on each platform's own
+       high-quality system UI font (SF Pro / Segoe UI / Roboto / etc via
+       the --font-sans stack in styles.css) rather than a network font
+       that could fail to load or add a dependency. -->
+  <link rel="stylesheet" href="/src/styles.css" />
+  <title>WorkRoaster</title>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/app.js"></script>
+</body>
+</html>
