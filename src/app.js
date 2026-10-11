@@ -2102,6 +2102,7 @@ function renderJobRow(job, records) {
               ? `<button class="icon-btn small danger" data-job-action="archive" data-id="${job.id}">Archive</button>`
               : `<button class="icon-btn small" data-job-action="restore" data-id="${job.id}">Restore</button>`
           }
+          ${usage === 0 ? `<button class="icon-btn small danger" data-job-action="delete" data-id="${job.id}" aria-label="Delete ${esc(job.name)}" title="No records use this job, so it can be deleted">Delete</button>` : ''}
         </div>
       </div>
       <div class="job-row-badges">
@@ -4079,6 +4080,20 @@ function handleJobAction(action, id) {
   }
   if (action === 'restore') {
     updateJobsList(jobs.restoreJob(list, id), 'Job restored.');
+    return;
+  }
+  if (action === 'delete') {
+    const job = list.find((j) => j.id === id);
+    if (!job) return;
+    const next = jobs.deleteUnusedJob(list, state.records, id);
+    if (next === list) {
+      // A record was added (maybe in another tab) since the button appeared.
+      showToast(`“${job.name}” is used by a record now, so it can’t be deleted — archive it instead.`);
+      return;
+    }
+    if (!confirm(`Delete the job “${job.name}”? No records use it. Its pay settings are removed from this device and this cannot be undone.`)) return;
+    if (state.jobEditingId === id) state.jobEditingId = null;
+    updateJobsList(next, `Job “${job.name}” deleted.`);
   }
 }
 

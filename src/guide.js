@@ -111,9 +111,10 @@ export const GUIDE_SECTIONS = [
         body: `<p>Settings → Jobs → <em>Edit</em>. You can change anything, including how it's paid, its rates, or its salary and schedule. Changes apply only to records you add <strong>afterwards</strong> — every saved record keeps the rates, salary and mode it was entered with.</p>`,
       },
       {
-        title: 'Archiving instead of deleting',
+        title: 'Archiving or deleting a job',
         keywords: 'archive restore delete job remove',
-        body: `<p>Jobs are never deleted. <em>Archive</em> hides a job from the job list for new records; every record already linked to it keeps showing it. <em>Restore</em> brings it back.</p>`,
+        body: `<p><em>Archive</em> hides a job from the job list for new records; every record already linked to it keeps showing it. <em>Restore</em> brings it back.</p>
+          <p>A job that <strong>no record uses</strong> — for example one you set up by mistake, or whose records you've deleted — also has a <em>Delete</em> button. It asks first, then removes the job and its pay settings for good. As soon as a job has even one record, it can only be archived, so your history is never lost.</p>`,
       },
     ],
   },

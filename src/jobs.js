@@ -151,3 +151,12 @@ export function archiveJob(jobs, id) {
 export function restoreJob(jobs, id) {
   return (jobs || []).map((j) => (j.id === id ? { ...j, active: true } : j));
 }
+
+/** Remove a job for good — only allowed while no record uses it, so a
+ *  deletion can never orphan a saved shift. Returns the list unchanged
+ *  (same array) when the job is in use or doesn't exist. */
+export function deleteUnusedJob(jobs, records, id) {
+  const list = jobs || [];
+  if (!list.some((j) => j.id === id) || jobUsageCount(records, id) > 0) return list;
+  return list.filter((j) => j.id !== id);
+}

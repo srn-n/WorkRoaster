@@ -327,8 +327,11 @@ base rate → weekend adjustment → additional adjustment. Example: base
 `$31.20`, Sunday `+50%` → `$46.80`, additional loading `+10%` → effective
 rate `$51.48/hr`. Each step is rounded to whole cents.
 
-**Jobs are never hard-deleted** (`jobs.js` deliberately has no `removeJob`
-function) — only archived (`active: false`) and restored. An archived
+**A job with records is never hard-deleted** — only archived
+(`active: false`) and restored. `jobs.js#deleteUnusedJob` removes a job
+only while `jobUsageCount` is 0 (it returns the list unchanged
+otherwise), so no record can ever point at a missing job; Settings → Jobs
+shows *Delete* only for such jobs and asks for confirmation. An archived
 job disappears from the job picker offered for *new* records, but every
 record that already references it keeps working exactly as before, and
 `jobs.js#jobsForSelect` still includes it in the dropdown when editing a
