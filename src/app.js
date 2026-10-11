@@ -8,6 +8,7 @@
  * framework — see README.md "Why vanilla JS" for the full reasoning.
  * -----------------------------------------------------------------------
  */
+import './style-heal.js'; // first: repairs an unstyled page caused by a bad cached stylesheet
 import * as calc from './calculations.js';
 import * as store from './storage.js';
 import * as opts from './settings.js';

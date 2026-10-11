@@ -7,6 +7,8 @@
 /* contrast — never from color intensity or scale for its own sake.    */
 /* ------------------------------------------------------------------ */
 :root {
+  /* Marker read by style-heal.js to confirm this stylesheet applied. */
+  --wr-styles: 1;
   color-scheme: light;
 
   /* Surfaces — warm off-white canvas, white working surfaces. Only two
