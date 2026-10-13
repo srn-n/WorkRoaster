@@ -88,6 +88,9 @@
   --shadow-xs: 0 1px 2px rgba(23, 23, 20, 0.06);
   --shadow-sm: 0 2px 10px rgba(23, 23, 20, 0.08), 0 1px 2px rgba(23, 23, 20, 0.05);
   --shadow-md: 0 12px 32px rgba(23, 23, 20, 0.12);
+  --header-glass-tint: 74%;
+  --header-glass-highlight: rgba(255, 255, 255, 0.55);
+  --header-glass-shadow: 0 10px 24px -18px rgba(23, 23, 20, 0.35);
 
   --focus-ring: 0 0 0 3px rgba(154, 104, 43, 0.24);
 
@@ -157,6 +160,9 @@
     --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
     --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.35);
     --shadow-md: 0 16px 40px rgba(0, 0, 0, 0.45);
+    --header-glass-tint: 70%;
+    --header-glass-highlight: rgba(255, 255, 255, 0.06);
+    --header-glass-shadow: 0 10px 26px -16px rgba(0, 0, 0, 0.7);
     --focus-ring: 0 0 0 3px rgba(199, 146, 77, 0.3);
   }
 }
@@ -199,6 +205,9 @@
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --header-glass-tint: 70%;
+  --header-glass-highlight: rgba(255, 255, 255, 0.06);
+  --header-glass-shadow: 0 10px 26px -16px rgba(0, 0, 0, 0.7);
   --focus-ring: 0 0 0 3px rgba(199, 146, 77, 0.3);
 }
 
@@ -322,6 +331,27 @@ a { color: var(--accent-text); }
 .brand-name { margin: 0; font: var(--text-page-title); letter-spacing: -0.01em; color: var(--text-primary); }
 .brand-tagline { font-size: 11.5px; color: var(--text-muted); font-weight: 450; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .command-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* Liquid-glass surface: the page tint at reduced opacity, blurred, with a
+   hairline edge, a faint top highlight and a soft drop shadow. Only where
+   the browser can blur (and mix colours) — everywhere else, and for people
+   who ask for less transparency, the header keeps its solid background. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and (background: color-mix(in srgb, red 50%, transparent)) {
+  .command-bar {
+    background: color-mix(in srgb, var(--bg) var(--header-glass-tint), transparent);
+    -webkit-backdrop-filter: saturate(160%) blur(18px);
+    backdrop-filter: saturate(160%) blur(18px);
+    border-bottom-color: var(--border);
+    box-shadow: inset 0 1px 0 var(--header-glass-highlight), var(--header-glass-shadow);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .command-bar {
+    background: var(--bg);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Buttons                                                             */
@@ -1435,6 +1465,17 @@ button.calendar-day { border: 0; margin: 0; font-family: inherit; text-align: le
   padding: 0 22px 20px;
 }
 .rate-confirmation-actions .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Job pay change: what changed, then two stacked, described choices. */
+.job-pay-change-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+.job-pay-change-list li { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; }
+.job-pay-change-list li > span:first-child { color: var(--text-muted); font-weight: 600; }
+.job-pay-change-options { grid-template-columns: 1fr; }
+.job-pay-change-options .rate-choice { display: grid; gap: 3px; padding: 10px 12px; text-align: left; }
+.job-pay-change-options .rate-choice strong { color: var(--text-primary); font-size: 12.5px; }
+.job-pay-change-options .rate-choice span { font-weight: 450; line-height: 1.4; }
+.job-pay-change-options .rate-choice.is-selected strong { color: var(--accent-text); }
+.job-pay-change-options .rate-choice:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
 
 /* Settings — a plain category rail. */
 .settings-layout { display: grid; grid-template-columns: 150px 1fr; gap: 4px; align-items: start; }

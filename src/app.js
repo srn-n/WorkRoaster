@@ -4186,8 +4186,151 @@ function handleJobEditSubmit(id, event) {
     document.getElementById(`je-name-${id}`)?.focus();
     return;
   }
+  // A job that already has records and whose pay settings changed: ask
+  // what should happen to those records before anything is saved.
+  const before = jobs.findJob(state.settings.jobs, id);
+  const after = jobs.findJob(result.jobs, id);
+  const counts = jobs.jobRecordCounts(state.records, id);
+  if (before && after && counts.total > 0 && jobs.payRulesChanged(before, after)) {
+    showJobPayChangeDialog(before, after, patch, counts);
+    return;
+  }
   state.jobEditingId = null;
   updateJobsList(result.jobs, 'Job updated.');
+}
+
+/** Human-readable before → after lines for the pay settings that changed. */
+function jobPayChangeLines(before, after) {
+  const rule = (r) => (calc.normalizeRule(r).type === 'none' ? 'none' : calc.formatRuleLabel(r, state.settings.currency));
+  const lines = [];
+  const payBefore = jobCardPaySummary(before);
+  const payAfter = jobCardPaySummary(after);
+  if (payBefore !== payAfter) lines.push(`<li><span>Pay</span><span>${payBefore} → ${payAfter}</span></li>`);
+  [['Saturday', 'saturdayRule'], ['Sunday', 'sundayRule'], ['Additional', 'additionalRule']].forEach(([label, key]) => {
+    const a = rule(before[key]);
+    const b = rule(after[key]);
+    if (a !== b) lines.push(`<li><span>${label}</span><span>${esc(a)} → ${esc(b)}</span></li>`);
+  });
+  if (!lines.length) lines.push('<li><span>Salary</span><span>schedule or break changed</span></li>');
+  return lines.join('');
+}
+
+/**
+ * Pay settings changed on a job that has records: the person chooses to
+ * re-rate those records with the new settings, or to keep them as they are
+ * and continue with a new version of the job. Cancel (button, Escape or
+ * closing the dialog) saves nothing — the editor stays open as typed.
+ */
+function showJobPayChangeDialog(before, after, patch, counts) {
+  if (rateConfirmationDialog) return;
+  const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+  const repriceable = counts.hourly + counts.payment;
+  const applyParts = [];
+  if (counts.hourly) applyParts.push(`${n(counts.hourly, 'hourly record gets', 'hourly records get')} the new rate and a recalculated amount`);
+  if (counts.payment) applyParts.push(`${n(counts.payment, 'actual-payment record keeps its', 'actual-payment records keep their')} entered payment; only the expected rate it’s compared with changes`);
+  const fixedNote = counts.fixed
+    ? ` ${n(counts.fixed, 'salaried record keeps its', 'salaried records keep their')} saved salary share either way.`
+    : '';
+  const dialog = document.createElement('dialog');
+  dialog.className = 'rate-confirmation-dialog job-pay-change-dialog';
+  dialog.setAttribute('aria-labelledby', 'job-pay-change-title');
+  dialog.setAttribute('aria-describedby', 'job-pay-change-summary');
+  dialog.innerHTML = `
+    <div class="rate-confirmation-head">
+      <span class="rate-confirmation-mark" aria-hidden="true">${icon('payment')}</span>
+      <div>
+        <p class="rate-confirmation-eyebrow">Pay settings changed</p>
+        <h2 id="job-pay-change-title">What about existing records?</h2>
+        <p class="rate-confirmation-job">${esc(before.name)} · ${n(counts.total, 'record uses', 'records use')} this job</p>
+      </div>
+    </div>
+    <div class="rate-confirmation-questions">
+      <ul class="job-pay-change-list" id="job-pay-change-summary">${jobPayChangeLines(before, after)}</ul>
+      <div class="rate-confirmation-options job-pay-change-options" role="group" aria-label="How to apply the new pay settings">
+        <button type="button" class="rate-choice" aria-pressed="false" data-pay-change="apply" ${repriceable ? '' : 'disabled'}>
+          <strong>Update existing records</strong>
+          <span>${repriceable ? `${esc(applyParts.join('; '))}.${esc(fixedNote)}` : 'Not available: salaried records always keep their saved salary share.'}</span>
+        </button>
+        <button type="button" class="rate-choice" aria-pressed="false" data-pay-change="version">
+          <strong>Keep old records, start a new version</strong>
+          <span>The current job keeps its settings and its ${n(counts.total, 'record', 'records')}, and is archived. A new job, “${esc(jobs.jobVersionName(state.settings.jobs, after.name))}”, with these settings is used for new records.</span>
+        </button>
+      </div>
+    </div>
+    <div class="rate-confirmation-actions">
+      <button type="button" class="btn secondary" data-pay-change-action="cancel">Cancel</button>
+      <button type="button" class="btn primary" data-pay-change-action="save" disabled>Save changes</button>
+    </div>`;
+  document.body.append(dialog);
+  rateConfirmationDialog = dialog;
+  const saveButton = dialog.querySelector('[data-pay-change-action="save"]');
+  let choice = null;
+  const finish = () => {
+    dialog.remove();
+    if (rateConfirmationDialog === dialog) rateConfirmationDialog = null;
+  };
+  dialog.addEventListener('click', (event) => {
+    const option = event.target.closest('[data-pay-change]');
+    if (option && !option.disabled) {
+      choice = option.dataset.payChange;
+      dialog.querySelectorAll('[data-pay-change]').forEach((b) => {
+        const on = b === option;
+        b.setAttribute('aria-pressed', String(on));
+        b.classList.toggle('is-selected', on);
+      });
+      saveButton.disabled = false;
+      return;
+    }
+    const action = event.target.closest('[data-pay-change-action]')?.dataset.payChangeAction;
+    if (action === 'cancel') {
+      dialog.close();
+      document.getElementById(`je-name-${before.id}`)?.focus();
+    }
+    if (action === 'save' && choice) {
+      dialog.close();
+      applyJobPayChange(before, patch, choice);
+    }
+  });
+  dialog.addEventListener('close', finish);
+  dialog.addEventListener('cancel', finish);
+  dialog.showModal();
+  dialog.querySelector('[data-pay-change]:not([disabled])')?.focus();
+}
+
+/** Commit the chosen pay change. Records and settings are saved together;
+ *  if the browser refuses either write, both are put back as they were. */
+function applyJobPayChange(before, patch, choice) {
+  const prevRecords = state.records;
+  const prevSettings = state.settings;
+  let message;
+  if (choice === 'apply') {
+    const result = jobs.updateJob(prevSettings.jobs, before.id, patch);
+    if (result.error) return showToast(result.error, 'error');
+    const updated = jobs.findJob(result.jobs, before.id);
+    const repriced = jobs.repriceJobRecords(prevRecords, updated);
+    state.records = repriced.records;
+    state.settings = { ...prevSettings, jobs: result.jobs };
+    message = `Job updated — ${repriced.changed} existing record${repriced.changed === 1 ? '' : 's'} recalculated.`;
+  } else {
+    const result = jobs.createJobVersion(prevSettings.jobs, before.id, patch);
+    if (result.error) return showToast(result.error, 'error');
+    state.settings = { ...prevSettings, jobs: result.jobs };
+    message = `New version “${result.job.name}” saved for new records. “${before.name}” keeps its records and is archived.`;
+  }
+  if (!persist()) {
+    // persist() reloads from storage, which may already hold the new
+    // records if only the settings write failed — put both back.
+    try {
+      store.saveRecords(prevRecords);
+      store.saveSettings(prevSettings);
+    } catch { /* storage unavailable: the in-memory state below is still the old one */ }
+    state.records = prevRecords;
+    state.settings = prevSettings;
+    render();
+    return;
+  }
+  state.jobEditingId = null;
+  showToast(message);
 }
 
 function handleAddJobSubmit(event) {
@@ -4889,6 +5032,9 @@ let escListenerInstalled = false;
 function escToClose(e) {
   if (e.key !== 'Escape' || !state.modal) return;
   if (datePickerOpen || jobPickerOpen || timePickerOpen || optionPickerOpenId) return;
+  // A confirmation dialog on top (e.g. the job pay-change choice) closes
+  // itself; the Settings window behind it — and what was typed there — stays.
+  if (rateConfirmationDialog) return;
   closeModal();
 }
 

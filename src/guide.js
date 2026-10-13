@@ -108,7 +108,13 @@ export const GUIDE_SECTIONS = [
       {
         title: 'Editing a job',
         keywords: 'edit job change rate change mode',
-        body: `<p>Settings → Jobs → <em>Edit</em>. You can change anything, including how it's paid, its rates, or its salary and schedule. Changes apply only to records you add <strong>afterwards</strong> — every saved record keeps the rates, salary and mode it was entered with.</p>`,
+        body: `<p>Settings → Jobs → <em>Edit</em>. You can change anything, including how it's paid, its rates, or its salary and schedule. Changing only the name, employer or notes saves straight away.</p>
+          <p>If you change the <strong>pay settings</strong> of a job that already has records, WorkRoaster shows what changed and asks what to do with those records:</p>
+          <ul>
+            <li><strong>Update existing records</strong> — recalculates them with the new settings. Hourly records get the new rate and a new amount; for actual-payment records the payment you entered stays, only the expected rate it's compared with changes. Each record keeps its own pay method, its weekend choice, and — if it was saved without the additional loading — stays without it. Salaried records always keep their saved salary share.</li>
+            <li><strong>Keep old records, start a new version</strong> — the current job and its records stay exactly as they are and the job is archived. A new version with the new settings is used from now on, with a numbered name such as <em>Westfield (2)</em> so the two never get mixed up.</li>
+          </ul>
+          <p><em>Cancel</em> changes nothing.</p>`,
       },
       {
         title: 'Archiving or deleting a job',
@@ -235,9 +241,9 @@ export const GUIDE_SECTIONS = [
         body: `<p>A record with a job uses that job's mode. A record with <em>No job</em> uses <strong>Settings → Workflow → Pay calculation for records without a job</strong>. Salaried records always belong to their job. Every record shows its mode as a tag (<em>Hourly</em>, <em>Actual payment</em>, <em>Monthly fixed pay</em> or <em>Yearly fixed pay</em>).</p>`,
       },
       {
-        title: 'Historical rates never change',
-        keywords: 'history snapshot preserved old records rate change retroactive',
-        body: `<p>When you save a record, WorkRoaster stores the rates actually used — base rate, weekend and additional rules, effective rate, or for a salaried job the salary and schedule — and its pay mode. Later edits to a job, or to settings, never recalculate saved records. On a record saved with a job, open <em>Rate breakdown</em> to see exactly how its pay was worked out.</p>`,
+        title: 'Historical rates stay unless you choose',
+        keywords: 'history snapshot preserved old records rate change retroactive recalculate version',
+        body: `<p>When you save a record, WorkRoaster stores the rates actually used — base rate, weekend and additional rules, effective rate, or for a salaried job the salary and schedule — and its pay mode. Changing settings never recalculates saved records. Changing a job's pay only does when you pick <em>Update existing records</em> in the question WorkRoaster asks (see <em>Editing a job</em>); pick <em>Keep old records, start a new version</em> and saved records stay exactly as they were. On a record saved with a job, open <em>Rate breakdown</em> to see exactly how its pay was worked out.</p>`,
       },
       {
         title: 'Salaried (fixed-pay) jobs',
@@ -418,9 +424,10 @@ export const GUIDE_SECTIONS = [
         body: `<p>Clearing this site's data in your browser, or using a private window, <strong>deletes your records</strong>. Download a JSON backup now and then (Backup &amp; export) — it's also how you move your data to another device. <em>Clear all records</em> permanently erases every record on this device.</p>`,
       },
       {
-        title: 'Changes never rewrite history',
-        keywords: 'settings change job change history preserved',
-        body: `<p>Changing settings or editing a job affects what you do next — never what's already saved. Saved records keep their rates, salary, mode and pay. Changing the pay-cycle length or start day only regroups how records are displayed.</p>`,
+        title: 'Changes never rewrite history without asking',
+        keywords: 'settings change job change history preserved recalculate version',
+        body: `<p>Changing settings affects what you do next — never what's already saved. Changing the pay-cycle length or start day only regroups how records are displayed.</p>
+          <p>The one exception is your choice: when you change the pay of a job that has records, WorkRoaster asks first. <em>Update existing records</em> recalculates that job's hourly records (actual payments and salary shares are kept); <em>Keep old records, start a new version</em> leaves every saved record exactly as it is. Either way dates, times, breaks and notes never change.</p>`,
       },
       {
         title: 'Profiles: separate workspaces',

@@ -337,14 +337,64 @@ record that already references it keeps working exactly as before, and
 `jobs.js#jobsForSelect` still includes it in the dropdown when editing a
 record that's actually assigned to it.
 
-**Editing a job's rates never touches existing records.** Every record
-that had a job selected when it was saved carries its own snapshot —
-`baseRateAtEntry`, `weekendRuleAtEntry`, `additionalRuleAtEntry`,
+**Editing a job's rates never silently touches existing records.** Every
+record that had a job selected when it was saved carries its own snapshot
+— `baseRateAtEntry`, `weekendRuleAtEntry`, `additionalRuleAtEntry`,
 `effectiveRateAtEntry` — captured at the moment it was entered. The
 record, not the job, is the source of truth for its own history: if
 Westfield Cleaning's base rate later changes from `$31.20` to `$33.00`,
-every past record still shows and totals at `$31.20`-derived figures;
-only records entered *after* the change pick up the new rate.
+past records keep their `$31.20`-derived figures unless the person
+explicitly chooses to update them (next section).
+
+### Changing pay settings on a job that has records
+
+Saving a job edit whose *pay* settings changed — `jobs.js#payRulesChanged`:
+base rate, pay method, Saturday/Sunday/additional rule, or salary and
+schedule (`fixedPay`) — while at least one record uses the job opens a
+confirmation dialog before anything is written (`app.js
+showJobPayChangeDialog`). Editing only the name, employer or notes, or
+editing a job no record uses, saves straight away as before. The dialog
+lists what changed and offers two choices:
+
+- **Update existing records** — `jobs.js#repriceJobRecords(records, job)`
+  re-rates that job's records with the new settings, exactly as saving
+  each record again would:
+  - the base rate and the resolved weekend and additional rules and
+    effective rate are rewritten in the record's snapshot fields;
+  - the record's own `weekendOverride` (default / none / custom) is kept,
+    and a record whose `additionalRuleAtEntry` is `none` keeps the
+    additional loading **off** — adding a loading to the job never applies
+    it to past records retroactively;
+  - each record keeps its **own pay method** (`recordPayMode`): hourly
+    records get a new `hourlyRate` and a recalculated `paymentAmount`;
+    actual-payment records keep the `paymentAmount` that was entered and
+    only `expectedRateAtEntry` / `expectedPaymentAtEntry` change. A
+    record is never converted from one method to the other, even when the
+    job's own method changed;
+  - **salaried records are never re-rated** — a fixed-pay record's
+    `fixedPayAtEntry` day share depends on the other scheduled days in its
+    period (see "Fixed-pay jobs" below), so it keeps its saved allocation.
+    The dialog says so; when every record of the job is salaried this
+    choice is disabled;
+  - dates, times, durations, breaks, notes, day/payment types, ids and
+    other jobs' records are never touched.
+- **Keep old records, start a new version** — `jobs.js#createJobVersion`
+  leaves the current job exactly as it is (id, settings, records) and
+  archives it, then adds a new active job with the edited settings. The new
+  version gets a unique name (`jobs.js#jobVersionName`): the edited name if
+  no job — active or archived — already uses it, otherwise the first free
+  `" (n)"` suffix, e.g. `Westfield` → `Westfield (2)` → `Westfield (3)`.
+  Names are compared the way backup imports compare them (trimmed, spaces
+  collapsed, case-insensitive), so versions show as distinct groups in the
+  pay-cycle history and an import's name matching can never pick the wrong
+  version. Records are unchanged; new records use the new version because
+  the archived one is no longer offered.
+
+**Cancel** (the button, Escape or closing the dialog) writes nothing and
+leaves the editor open with what was typed; Escape closes only the dialog,
+not the Settings window behind it. Records and settings are saved
+together, and if the browser refuses either write both are restored to
+their previous values.
 
 **Record-level weekend override** (`weekendOverride`): lets one record
 diverge from its job's own configured Saturday/Sunday rule without
