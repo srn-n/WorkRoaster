@@ -51,7 +51,17 @@ const state = {
   cycleNavDirection: null, // null | 'left' | 'right'
   // Which job (if any) is expanded for inline editing in Settings > Jobs.
   jobEditingId: null,
+  // The page on screen: 'home' (dashboard + records) or 'notes'. Follows
+  // the URL hash (#notes), so reload and the browser's Back button work.
+  view: viewFromHash(),
+  // This profile's quick notes, and the one being edited inline (if any).
+  notes: store.loadNotes(),
+  noteEditingId: null,
 };
+
+function viewFromHash() {
+  return typeof location !== 'undefined' && location.hash === '#notes' ? 'notes' : 'home';
+}
 
 // ---------------------------------------------------------------------
 // Transient, non-persisted UI state that must survive independently of
@@ -129,6 +139,8 @@ const ICONS = {
   arrowRight: '<path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path>',
   book: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"></path><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"></path><line x1="8" y1="8" x2="16" y2="8"></line>',
   search: '<circle cx="11" cy="11" r="7"></circle><line x1="16.5" y1="16.5" x2="21" y2="21"></line>',
+  note: '<path d="M5 4h10l4 4v12H5z"></path><path d="M15 4v4h4"></path><path d="M8.5 12.5h7M8.5 16h5"></path>',
+  palette: '<path d="M12 3a9 9 0 1 0 0 18c1 0 1.6-.8 1.6-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-4-4-7.3-9-7.3z"></path><circle cx="7.5" cy="11" r="1"></circle><circle cx="10" cy="7.5" r="1"></circle><circle cx="14.5" cy="7.5" r="1"></circle>',
 };
 
 function icon(name, cls = '') {
@@ -242,10 +254,33 @@ function showToast(message, tone = 'success') {
 }
 
 function applyTheme() {
+  const root = document.documentElement;
   const t = state.settings.theme;
-  if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
-  else document.documentElement.removeAttribute('data-theme');
+  if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t);
+  else root.removeAttribute('data-theme');
+  // Visual theme: the classic WorkRoaster look has no attribute at all.
+  const visual = state.settings.visualTheme;
+  if (visual && visual !== 'classic') root.setAttribute('data-visual', visual);
+  else root.removeAttribute('data-visual');
+  setHeaderTransparencyVar(state.settings.headerTransparency);
 }
+
+/** 0 … 100 → --header-transparency 0 … 1 (styles.css turns it into tint and blur). */
+function setHeaderTransparencyVar(value) {
+  const n = store.normalizeHeaderTransparency(value);
+  document.documentElement.style.setProperty('--header-transparency', String(n / 100));
+}
+
+const VISUAL_THEME_CHOICES = [
+  { id: 'classic', name: 'WorkRoaster', blurb: 'Warm paper and bronze — the original look.' },
+  { id: 'retro', name: 'Retro', blurb: 'Cream stock, burnt orange and teal, like an old ledger.' },
+  { id: 'minimal', name: 'Modern', blurb: 'Quiet neutrals with one punchy cobalt accent.' },
+  { id: 'cyberpunk', name: 'Cyberpunk', blurb: 'Ink-dark violet with magenta and cyan signals.' },
+];
+const headerTransparencyLabel = (v) => {
+  const n = store.normalizeHeaderTransparency(v);
+  return `${n}% — ${n < 25 ? 'mostly solid' : n < 60 ? 'balanced glass' : 'very clear glass'}`;
+};
 
 // ---------------------------------------------------------------------
 // Templates
@@ -287,10 +322,270 @@ function renderHeader() {
       <div class="command-actions">
         <button class="icon-btn" id="btn-theme" type="button" title="Toggle theme" aria-label="Switch to ${nextTheme} theme">${icon(themeIcon)}</button>
         <button class="btn secondary" id="btn-guide" type="button">${icon('book', 'icon-sm')}<span class="btn-label">Guide</span></button>
+        ${renderNotesNavButton()}
         <button class="btn secondary" id="btn-data" type="button">${icon('download', 'icon-sm')}<span class="btn-label">Backup &amp; export</span></button>
         <button class="btn secondary" id="btn-settings" type="button">${icon('settings', 'icon-sm')}<span class="btn-label">Settings</span></button>
       </div>
     </header>`;
+}
+
+/** Header "Notes" item: a real page link with the pending-note count. */
+function renderNotesNavButton() {
+  const pending = store.pendingNoteCount(state.notes);
+  const onNotes = state.view === 'notes';
+  const label = `Notes${pending ? `, ${pending} pending` : ''}`;
+  return `<a class="btn secondary nav-notes ${onNotes ? 'is-current' : ''}" id="btn-notes" href="#notes" ${onNotes ? 'aria-current="page"' : ''} aria-label="${label}">
+          ${icon('note', 'icon-sm')}<span class="btn-label">Notes</span>
+          <span class="nav-badge ${pending ? '' : 'is-empty'}" id="notes-badge" aria-hidden="true">${pending}</span>
+        </a>`;
+}
+
+// ---------------------------------------------------------------------
+// Quick Notes page — a short to-do list per profile (store.loadNotes()).
+// ---------------------------------------------------------------------
+const noteTime = (iso) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime()) || d.getTime() === 0) return '';
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+};
+
+function renderNoteItem(note) {
+  const editing = state.noteEditingId === note.id;
+  const when = note.done && note.doneAt ? `Done ${noteTime(note.doneAt)}` : noteTime(note.createdAt) ? `Added ${noteTime(note.createdAt)}` : '';
+  return `
+    <li class="note-item ${note.done ? 'is-done' : ''} ${editing ? 'is-editing' : ''}" data-note-id="${esc(note.id)}">
+      <label class="note-check" title="${note.done ? 'Mark as not done' : 'Mark as done'}">
+        <input type="checkbox" id="note-done-${esc(note.id)}" data-note-toggle="${esc(note.id)}" ${note.done ? 'checked' : ''}>
+        <span class="note-check-box" aria-hidden="true">${icon('check', 'icon-sm')}</span>
+        <span class="visually-hidden">${note.done ? 'Done' : 'Not done'}: ${esc(note.text.slice(0, 80))}</span>
+      </label>
+      ${
+        editing
+          ? `<form class="note-edit-form" data-note-edit-form="${esc(note.id)}">
+              <label class="visually-hidden" for="note-edit-${esc(note.id)}">Edit note</label>
+              <textarea id="note-edit-${esc(note.id)}" rows="2" maxlength="${store.NOTE_MAX_LENGTH}" required>${esc(note.text)}</textarea>
+              <div class="note-edit-actions">
+                <button class="btn primary small" type="submit">${icon('check', 'icon-sm')}Save</button>
+                <button class="btn secondary small" type="button" data-note-action="cancel-edit" data-id="${esc(note.id)}">Cancel</button>
+              </div>
+            </form>`
+          : `<div class="note-body">
+              <p class="note-text">${esc(note.text)}</p>
+              ${when ? `<span class="note-meta">${esc(when)}</span>` : ''}
+            </div>
+            <div class="note-actions">
+              <button class="icon-btn small" type="button" id="note-edit-btn-${esc(note.id)}" data-note-action="edit" data-id="${esc(note.id)}" title="Edit" aria-label="Edit note">${icon('edit', 'icon-sm')}</button>
+              <button class="icon-btn small danger" type="button" data-note-action="delete" data-id="${esc(note.id)}" title="Delete" aria-label="Delete note">${icon('trash', 'icon-sm')}</button>
+            </div>`
+      }
+    </li>`;
+}
+
+function renderNotesPage() {
+  const pending = state.notes.filter((n) => !n.done);
+  const done = state.notes.filter((n) => n.done);
+  const profileName = hasProfiles() ? activeProfile().name : '';
+  return `
+    <section class="panel notes-page" aria-labelledby="notes-title">
+      <div class="notes-head">
+        <a class="btn secondary small notes-back" href="#" id="btn-notes-back">${icon('arrowLeft', 'icon-sm')}Records</a>
+        <div class="notes-title-wrap">
+          <h2 class="notes-title" id="notes-title">Quick notes</h2>
+          <p class="notes-sub">${profileName ? `For <b>${esc(profileName)}</b> · ` : ''}<span id="notes-summary">${pending.length} pending${done.length ? ` · ${done.length} done` : ''}</span></p>
+        </div>
+      </div>
+      <form class="note-capture" id="note-capture-form" autocomplete="off">
+        <label class="visually-hidden" for="note-new">New note</label>
+        <textarea id="note-new" rows="1" maxlength="${store.NOTE_MAX_LENGTH}" placeholder="Write a quick note…" aria-describedby="notes-hint"></textarea>
+        <button class="btn primary" type="submit" id="btn-note-add">${icon('plus', 'icon-sm')}Add</button>
+      </form>
+      <p class="notes-hint" id="notes-hint">Enter adds the note · Shift+Enter starts a new line</p>
+      ${
+        !state.notes.length
+          ? `<div class="empty-state notes-empty">
+              <div class="empty-icon" aria-hidden="true">${icon('note')}</div>
+              <h3>No notes yet</h3>
+              <p>Jot down things to remember — a shift swap, a missing payslip, a rate to check. Tick them off when they're done.</p>
+            </div>`
+          : `
+      <div class="notes-section">
+        <h3 class="notes-section-title">To do <span class="notes-count tnum">${pending.length}</span></h3>
+        ${
+          pending.length
+            ? `<ul class="note-list" id="notes-pending">${pending.map(renderNoteItem).join('')}</ul>`
+            : `<div class="notes-allclear">${icon('check', 'icon-sm')}All caught up — nothing pending.</div>`
+        }
+      </div>
+      ${
+        done.length
+          ? `<div class="notes-section">
+              <h3 class="notes-section-title">Completed <span class="notes-count tnum">${done.length}</span></h3>
+              <ul class="note-list is-done-list" id="notes-done">${done.map(renderNoteItem).join('')}</ul>
+            </div>`
+          : ''
+      }`
+      }
+    </section>`;
+}
+
+/** Save notes, rolling back (and saying so) if the browser refuses. */
+function commitNotes(nextNotes, message) {
+  const prev = state.notes;
+  state.notes = nextNotes;
+  try {
+    store.saveNotes(nextNotes);
+  } catch (err) {
+    console.warn('WorkRoaster: could not save notes', err);
+    state.notes = prev;
+    showToast(PERSIST_FAILED_MESSAGE, 'error');
+    return false;
+  }
+  if (message) showToast(message);
+  else render();
+  return true;
+}
+
+function addNote(text) {
+  const clean = String(text || '').trim();
+  if (!clean) {
+    document.getElementById('note-new')?.focus();
+    return;
+  }
+  const now = new Date().toISOString();
+  const note = { id: store.makeNoteId(), text: clean.slice(0, store.NOTE_MAX_LENGTH), done: false, createdAt: now, updatedAt: now };
+  lastAddedNoteId = note.id;
+  notesCaptureCleared = true;
+  focusAfterRender = focusById('note-new');
+  commitNotes([note, ...state.notes], 'Note added.');
+}
+
+function toggleNote(id, done) {
+  const now = new Date().toISOString();
+  const next = state.notes.map((n) => {
+    if (n.id !== id) return n;
+    const out = { ...n, done, updatedAt: now };
+    if (done) out.doneAt = now;
+    else delete out.doneAt;
+    return out;
+  });
+  const left = store.pendingNoteCount(next);
+  lastToggledNoteId = id;
+  focusAfterRender = focusById(`note-done-${id}`);
+  commitNotes(next, done ? `Done — ${left} note${left === 1 ? '' : 's'} left.` : 'Moved back to To do.');
+}
+
+function saveNoteEdit(id, text) {
+  const clean = String(text || '').trim();
+  if (!clean) return showToast('A note needs some text — or delete it instead.', 'error');
+  const now = new Date().toISOString();
+  state.noteEditingId = null;
+  focusAfterRender = focusById(`note-edit-btn-${id}`);
+  commitNotes(state.notes.map((n) => (n.id === id ? { ...n, text: clean.slice(0, store.NOTE_MAX_LENGTH), updatedAt: now } : n)), 'Note updated.');
+}
+
+function deleteNote(id) {
+  const note = state.notes.find((n) => n.id === id);
+  if (!note) return;
+  if (!confirm(`Delete this note?\n\n“${note.text.slice(0, 120)}${note.text.length > 120 ? '…' : ''}”`)) return;
+  if (state.noteEditingId === id) state.noteEditingId = null;
+  focusAfterRender = focusById('note-new');
+  commitNotes(state.notes.filter((n) => n.id !== id), 'Note deleted.');
+}
+
+let lastAddedNoteId = null;
+let lastToggledNoteId = null;
+/** Focus the element with this id after the next render. */
+const focusById = (id) => () => document.getElementById(id);
+
+function wireNotesEvents() {
+  const capture = document.getElementById('note-capture-form');
+  if (!capture) return;
+  const input = document.getElementById('note-new');
+  capture.addEventListener('submit', (e) => {
+    e.preventDefault();
+    addNote(input.value);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      addNote(input.value);
+    }
+  });
+  // Grow the capture box with its text (up to a few lines).
+  const grow = () => { input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 160)}px`; };
+  input.addEventListener('input', grow);
+  document.querySelectorAll('[data-note-toggle]').forEach((box) =>
+    box.addEventListener('change', () => toggleNote(box.dataset.noteToggle, box.checked))
+  );
+  document.querySelectorAll('[data-note-action]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const { noteAction: action, id } = b.dataset;
+      if (action === 'edit') {
+        state.noteEditingId = id;
+        focusAfterRender = focusById(`note-edit-${id}`);
+        render();
+      } else if (action === 'cancel-edit') {
+        state.noteEditingId = null;
+        focusAfterRender = focusById(`note-edit-btn-${id}`);
+        render();
+      } else if (action === 'delete') deleteNote(id);
+    })
+  );
+  document.querySelectorAll('[data-note-edit-form]').forEach((form) => {
+    const id = form.dataset.noteEditForm;
+    const area = form.querySelector('textarea');
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      saveNoteEdit(id, area.value);
+    });
+    area.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        saveNoteEdit(id, area.value);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        state.noteEditingId = null;
+        focusAfterRender = focusById(`note-edit-btn-${id}`);
+        render();
+      }
+    });
+  });
+  // One-shot feedback: the note just added slides in, the one just ticked pops.
+  if (lastAddedNoteId) document.querySelector(`[data-note-id="${CSS.escape(lastAddedNoteId)}"]`)?.classList.add('is-new');
+  if (lastToggledNoteId) document.querySelector(`[data-note-id="${CSS.escape(lastToggledNoteId)}"]`)?.classList.add('is-just-toggled');
+  lastAddedNoteId = null;
+  lastToggledNoteId = null;
+  document.getElementById('btn-notes-back')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    navigateTo('home');
+  });
+}
+
+/** Move between the dashboard and the Notes page (keeps the URL hash in step). */
+function navigateTo(view) {
+  if (view === state.view) return;
+  if (view === 'notes') {
+    if (location.hash !== '#notes') location.hash = 'notes'; // hashchange renders
+    else { state.view = 'notes'; render(); }
+    return;
+  }
+  history.pushState(null, '', location.pathname + location.search);
+  state.view = 'home';
+  state.noteEditingId = null;
+  focusAfterRender = focusById('btn-notes');
+  render();
+  window.scrollTo({ top: 0 });
+}
+
+function onHashChange() {
+  const view = viewFromHash();
+  if (view === state.view) return;
+  state.view = view;
+  state.noteEditingId = null;
+  focusAfterRender = focusById(view === 'notes' ? 'note-new' : 'btn-notes');
+  render();
+  window.scrollTo({ top: 0 });
 }
 
 /** Add n days to a plain "YYYY-MM-DD" string, in local time — the same
@@ -1480,7 +1775,6 @@ function recordMetaTags(r) {
     <span class="tag">${icon(recordTypeIcon(r.dayType, 'day'), 'icon-sm')}${esc(r.dayType || 'Unspecified')}</span>
     <span class="tag muted-tag">${icon(recordTypeIcon(r.paymentType, 'payment'), 'icon-sm')}${esc(r.paymentType || 'Unspecified')}</span>
     ${r.mapNumber ? `<span class="meta-item">Period <b>${esc(r.mapNumber)}</b></span>` : ''}
-    ${r.breakMinutes ? `<span class="meta-item">Break <b>${esc(calc.formatDuration(r.breakMinutes))}</b></span>` : ''}
     ${legacyCycle ? `<span class="meta-item legacy-cycle" title="Manually entered before automatic cycles were added">Was <b>${esc(legacyCycle)}</b></span>` : ''}`;
 }
 
@@ -1513,7 +1807,8 @@ function renderLedgerRow(r) {
         <span class="ledger-job ${jobName ? '' : 'is-unassigned'}">${icon('briefcase', 'icon-sm')}${jobName ? esc(jobName) : 'No job'}</span>
       </td>
       <td class="ledger-time">
-        ${icon('clock', 'icon-sm')}${esc(calc.formatActiveHour(r))}
+        <span class="ledger-time-main">${icon('clock', 'icon-sm')}<span>${esc(calc.formatActiveHour(r))}</span></span>
+        ${r.breakMinutes ? `<span class="ledger-time-break">Break <b>${esc(calc.formatDuration(r.breakMinutes))}</b></span>` : ''}
       </td>
       <td class="ledger-duration tnum">${calc.formatDuration(mins)}</td>
       <td class="ledger-rate tnum">${recordRateLabel(r)}</td>
@@ -1549,7 +1844,10 @@ function renderLedgerMobileRow(r) {
         </div>
         <div class="ledger-mobile-bottom">
           <span class="ledger-mobile-summary">
-            ${icon('clock', 'icon-sm')}${esc(calc.formatActiveHour(r))} · ${calc.formatDuration(mins)}${rateLabel !== '—' ? ` · <b>${rateLabel}</b>` : ''}
+            <span class="ledger-time-main">${icon('clock', 'icon-sm')}<span>${esc(calc.formatActiveHour(r))}</span></span>
+            <span class="ledger-mobile-part">${calc.formatDuration(mins)}</span>
+            ${r.breakMinutes ? `<span class="ledger-mobile-part ledger-time-break">Break <b>${esc(calc.formatDuration(r.breakMinutes))}</b></span>` : ''}
+            ${rateLabel !== '—' ? `<span class="ledger-mobile-part"><b>${rateLabel}</b></span>` : ''}
           </span>
           <div class="record-actions">
             <button class="icon-btn small" data-action="edit" data-id="${r.id}" title="Edit" aria-label="Edit record from ${esc(calc.shortDateLabel(r.date))}">${icon('edit', 'icon-sm')}</button>
@@ -1799,9 +2097,10 @@ function renderProfileBar() {
   if (!hasProfiles()) return '';
   const { profiles } = profileIndex();
   return `
-    <div class="profile-bar">
+    <div class="profile-bar" data-active-profile="${esc(store.getActiveProfileId())}">
       <label class="profile-bar-label" for="h-profile">${icon('briefcase', 'icon-sm')}Profile</label>
       <div class="profile-bar-select">${themedSelect('h-profile', profiles.map((p) => ({ value: p.id, label: p.name })), store.getActiveProfileId(), 'profile')}</div>
+      <span class="profile-bar-count" aria-live="polite">${state.records.length} record${state.records.length === 1 ? '' : 's'} · ${store.pendingNoteCount(state.notes)} pending note${store.pendingNoteCount(state.notes) === 1 ? '' : 's'}</span>
     </div>`;
 }
 
@@ -1812,12 +2111,16 @@ function switchProfile(id) {
   try { store.rememberActiveProfile(id); } catch { /* storage full — still switch for this visit */ }
   state.records = store.loadRecords();
   state.settings = store.loadSettings();
+  state.notes = store.loadNotes();
+  state.noteEditingId = null;
   state.editingId = null;
   state.focusedCycleKey = null;
   state.exportRequest = null;
   state.formError = '';
+  parkedFormDraft = null;
   cycleExpansion.clear();
   calendarView = null;
+  profileSwitchMotion = true;
   showToast(`Switched to ${activeProfile().name}.`);
 }
 
@@ -1872,13 +2175,15 @@ function handleProfileAction(action, id) {
     }
     if (action === 'delete') {
       const count = id === store.getActiveProfileId() ? state.records.length : store.loadRecordsFor(id).length;
-      if (!confirm(`Delete the profile “${profile.name}” and its ${count} record(s) and jobs from this device? This cannot be undone — download a backup of it first if unsure.`)) return;
+      if (!confirm(`Delete the profile “${profile.name}” and its ${count} record(s), jobs and notes from this device? This cannot be undone — download a backup of it first if unsure.`)) return;
       const wasActive = id === store.getActiveProfileId();
       store.deleteProfile(id);
       if (wasActive) {
         store.setActiveProfile(store.DEFAULT_PROFILE_ID);
         state.records = store.loadRecords();
         state.settings = store.loadSettings();
+        state.notes = store.loadNotes();
+        state.noteEditingId = null;
         state.editingId = null;
         state.focusedCycleKey = null;
         cycleExpansion.clear();
@@ -1898,8 +2203,8 @@ function addProfile(name) {
   try {
     // Make sure the current profile is saved under its own keys first.
     if (!persist()) return;
-    if (!hasProfiles()) store.saveProfiles({ ...profileIndex(), theme: state.settings.theme });
-    const profile = store.createProfile(clean, { theme: state.settings.theme, currency: state.settings.currency });
+    if (!hasProfiles()) store.saveProfiles({ ...profileIndex(), ...store.appearanceOf(state.settings) });
+    const profile = store.createProfile(clean, { ...store.appearanceOf(state.settings), currency: state.settings.currency });
     switchProfile(profile.id);
     showToast(`Added ${profile.name} and switched to it. Set up its jobs and pay cycle in Settings.`);
   } catch {
@@ -2257,9 +2562,32 @@ function settingsTabContent(tab) {
       ${exportVisibilityFields('s-export', state.settings.exportVisibility)}
     </fieldset>`;
 
+  const visualNow = state.settings.visualTheme || 'classic';
   const appearanceTab = `
+    <fieldset class="field-group appearance-themes">
+      <legend>Visual theme</legend>
+      <p class="field-help" id="s-visual-help">Colours, surfaces and accents for the whole app. Every theme has a light and a dark version — choose which below. Shared by all profiles.</p>
+      <div class="visual-theme-grid" role="radiogroup" aria-describedby="s-visual-help">
+        ${VISUAL_THEME_CHOICES.map((t) => `
+        <label class="visual-theme-card ${visualNow === t.id ? 'is-selected' : ''}" data-visual-preview="${t.id}">
+          <input type="radio" name="s-visual-theme" value="${t.id}" ${visualNow === t.id ? 'checked' : ''}>
+          <span class="visual-theme-swatch" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span class="visual-theme-name">${esc(t.name)}</span>
+          <span class="visual-theme-blurb">${esc(t.blurb)}</span>
+        </label>`).join('')}
+      </div>
+    </fieldset>
     <div class="field">
-      <label for="s-theme">Theme</label>
+      <label for="s-header-glass">Top bar transparency</label>
+      <div class="range-row">
+        <span class="range-end" aria-hidden="true">Solid</span>
+        <input type="range" id="s-header-glass" min="0" max="100" step="5" value="${store.normalizeHeaderTransparency(state.settings.headerTransparency)}" aria-describedby="s-header-glass-help" aria-valuetext="${esc(headerTransparencyLabel(state.settings.headerTransparency))}">
+        <span class="range-end" aria-hidden="true">Clear</span>
+      </div>
+      <small class="field-help" id="s-header-glass-help"><output id="s-header-glass-value" for="s-header-glass">${esc(headerTransparencyLabel(state.settings.headerTransparency))}</output>. How much of the page shows through the top bar as you scroll. Text and buttons stay readable at every setting; browsers without blur keep a solid bar.</small>
+    </div>
+    <div class="field">
+      <label for="s-theme">Light or dark</label>
       <div class="select-control select-plain">
       <select id="s-theme">
         <option value="system" ${state.settings.theme === 'system' ? 'selected' : ''}>Match system</option>
@@ -2666,16 +2994,30 @@ function renderToast() {
 }
 
 let initialRender = true;
+let themeChangeTimer = null;
+// Page / profile transitions (presentation only — data is already updated
+// before the render that plays them).
+let lastRenderedView = null;
+let profileSwitchMotion = false;
+let parkedFormDraft = null;
 
 function initCanvasMotion() {
   if (window.__workRoasterCanvasMotion) return;
   window.__workRoasterCanvasMotion = true;
   let ticking = false;
+  let scrolled = false;
   const update = () => {
     const y = Math.round(window.scrollY * -0.11);
     const x = Math.round(Math.sin(window.scrollY * 0.0018) * 7);
     document.documentElement.style.setProperty('--canvas-shift-y', y + 'px');
     document.documentElement.style.setProperty('--canvas-shift-x', x + 'px');
+    // The top bar reacts to scrolling (tint/shadow only — never its height,
+    // so nothing below it jumps). Hysteresis stops flicker at the edge.
+    const next = scrolled ? window.scrollY > 4 : window.scrollY > 16;
+    if (next !== scrolled) {
+      scrolled = next;
+      document.documentElement.toggleAttribute('data-scrolled', scrolled);
+    }
     ticking = false;
   };
   window.addEventListener('scroll', () => {
@@ -2689,8 +3031,30 @@ function initCanvasMotion() {
 function render() {
   // A full render rebuilds the record form, so no option popover survives it.
   optionPickerOpenId = null;
+  // An open time picker is reopened after an unrelated render (a toast
+  // expiring) — but only on the same profile and screen, and only if its
+  // field is still there; never carried into a switched profile.
+  const reopenTimePicker = timePickerOpen && timePickerTargetId
+    ? { target: timePickerTargetId, profile: store.getActiveProfileId(), view: state.view, modal: state.modal }
+    : null;
+  // …nor a time picker: its popover comes back closed and empty, so the
+  // open state must not outlive it (otherwise the next click on the clock
+  // "closes" an already-closed picker, and a later action targets a field
+  // from before the render — e.g. after switching or adding a profile).
+  timePickerOpen = false;
+  timePickerTargetId = null;
   // …and it shows the latest data, including any change from another tab.
-  const formDraft = captureFormDraft();
+  // The record form only exists on the home page: an unsaved draft is parked
+  // while Notes is open and put back on return.
+  const formDraft = captureFormDraft() || (state.view === 'home' ? parkedFormDraft : null);
+  if (state.view !== 'home' && formDraft) parkedFormDraft = formDraft;
+  if (state.view === 'home') parkedFormDraft = null;
+  // Text being typed on the Notes page survives renders (a toast expiring).
+  const notesDraft = captureNotesDraft();
+  const viewChanged = lastRenderedView !== null && lastRenderedView !== state.view;
+  const mainMotion = viewChanged ? 'is-view-entering' : profileSwitchMotion ? 'is-profile-entering' : '';
+  lastRenderedView = state.view;
+  profileSwitchMotion = false;
   formDirty = false;
   externalChangePending = false;
   // The Settings/Guide pane is the modal's scroll container; a full
@@ -2718,8 +3082,9 @@ function render() {
   root.innerHTML = `
     <div class="app-shell ${initialRender ? 'is-entering' : ''}">
       ${renderHeader()}
-      <main class="app-main" id="main-content">
+      <main class="app-main ${mainMotion}" id="main-content">
         ${renderProfileBar()}
+        ${state.view === 'notes' ? renderNotesPage() : `
         ${renderStats(cycles)}
         <div class="workspace-grid">
           ${renderForm()}
@@ -2729,7 +3094,7 @@ function render() {
           </div>
         </div>
         ${renderRecords(cycles)}
-        ${renderInsights()}
+        ${renderInsights()}`}
       </main>
     </div>
     ${renderSettingsModal()}
@@ -2754,8 +3119,38 @@ function render() {
   positionRailIndicator(true);
   initialRender = false;
   restoreFormDraft(formDraft);
+  restoreNotesDraft(notesDraft);
   restoreFocusAfterRender(previousModal, focusedId);
+  if (
+    reopenTimePicker &&
+    reopenTimePicker.profile === store.getActiveProfileId() &&
+    reopenTimePicker.view === state.view &&
+    reopenTimePicker.modal === state.modal &&
+    document.getElementById(reopenTimePicker.target)
+  ) openTimePicker(reopenTimePicker.target);
 }
+
+/** Unsaved text in the Notes capture box / the note being edited, with the
+ *  caret position, so a render never throws away what's being typed. */
+function captureNotesDraft() {
+  if (state.view !== 'notes') return null;
+  const grab = (el) => (el ? { id: el.id, value: el.value, start: el.selectionStart, end: el.selectionEnd } : null);
+  const fields = [grab(document.getElementById('note-new')), grab(document.querySelector('[data-note-edit-form] textarea'))].filter(Boolean);
+  return fields.length ? fields : null;
+}
+function restoreNotesDraft(draft) {
+  if (!draft) return;
+  for (const f of draft) {
+    const el = document.getElementById(f.id);
+    // A just-added note clears the capture box on purpose (see addNote).
+    if (!el || (f.id === 'note-new' && notesCaptureCleared)) continue;
+    el.value = f.value;
+    if (f.start !== null) el.setSelectionRange(f.start, f.end);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  notesCaptureCleared = false;
+}
+let notesCaptureCleared = false;
 
 /** What the person has typed into the record form but not saved yet. */
 function captureFormDraft() {
@@ -2795,6 +3190,7 @@ function restoreFormDraft(draft) {
 function discardFormDraft() {
   dirtyFieldIds.clear();
   formDirty = false;
+  parkedFormDraft = null;
 }
 
 /** A full render replaces the page's DOM, which would otherwise drop
@@ -3456,27 +3852,32 @@ function commitTimePickerPart(part, value) {
   refreshTimePickerBody();
 }
 
-function wireTimePickerBodyEvents() {
-  document.querySelectorAll('[data-tp-part]').forEach((btn) => {
+// Wire only the OPEN picker's own buttons. A page-wide querySelector here
+// used to find the first "Done" in the document — the Start picker's, once
+// it had been used — so the End picker's Done did nothing and its popover
+// stayed open (seen after adding a profile and switching to end times).
+function wireTimePickerBodyEvents(body) {
+  if (!body) return;
+  body.querySelectorAll('[data-tp-part]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const part = btn.dataset.tpPart;
       const value = part === 'period' ? btn.dataset.tpValue : Number(btn.dataset.tpValue);
       commitTimePickerPart(part, value);
     });
   });
-  document.querySelector('[data-tp-action="now"]')?.addEventListener('click', () => {
+  body.querySelector('[data-tp-action="now"]')?.addEventListener('click', () => {
     const now = new Date();
     setTimePickerValue(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
     refreshTimePickerBody();
   });
-  document.querySelector('[data-tp-action="done"]')?.addEventListener('click', () => closeTimePicker());
+  body.querySelector('[data-tp-action="done"]')?.addEventListener('click', () => closeTimePicker({ returnFocus: true }));
 }
 
 function refreshTimePickerBody() {
   const body = document.getElementById(timePickerBodyId());
   if (!body) return;
   body.innerHTML = renderTimePickerBody();
-  wireTimePickerBodyEvents();
+  wireTimePickerBodyEvents(body);
   body.querySelectorAll('.time-picker-option.is-selected').forEach((el) => el.scrollIntoView({ block: 'nearest' }));
 }
 
@@ -3489,14 +3890,21 @@ function openTimePicker(targetId) {
   timePickerOpen = true;
 }
 
-function closeTimePicker() {
+function closeTimePicker({ returnFocus = false } = {}) {
   if (!timePickerOpen || !timePickerTargetId) {
     timePickerOpen = false;
+    timePickerTargetId = null;
     return;
   }
+  const trigger = document.getElementById(timePickerTriggerId());
   document.getElementById(timePickerPopoverId())?.classList.remove('is-open');
-  document.getElementById(timePickerTriggerId())?.setAttribute('aria-expanded', 'false');
+  trigger?.setAttribute('aria-expanded', 'false');
+  // Empty the closed picker so no stale buttons are left in the page.
+  const body = document.getElementById(timePickerBodyId());
+  if (body) body.innerHTML = '';
   timePickerOpen = false;
+  timePickerTargetId = null;
+  if (returnFocus) trigger?.focus();
 }
 
 function toggleTimePicker(targetId) {
@@ -4384,7 +4792,7 @@ function profileFileTag() {
 }
 
 function exportJSON() {
-  const backup = store.buildBackup(state.records, state.settings, hasProfiles() ? activeProfile().name : null);
+  const backup = store.buildBackup(state.records, state.settings, hasProfiles() ? activeProfile().name : null, state.notes);
   store.downloadFile(`workroaster-backup${profileFileTag()}-${calc.todayString()}.json`, JSON.stringify(backup, null, 2), 'application/json');
   showToast(hasProfiles() ? `Backup of ${activeProfile().name} downloaded.` : 'Backup downloaded.');
 }
@@ -4493,20 +4901,23 @@ function importAllProfiles(fileProfiles, mode) {
     let target = profileIndex().profiles.find((p) => p.name.toLowerCase() === fp.name.toLowerCase());
     let isNew = false;
     if (!target) {
-      if (!hasProfiles()) store.saveProfiles({ ...profileIndex(), theme: state.settings.theme });
-      target = store.createProfile(fp.name, { theme: state.settings.theme });
+      if (!hasProfiles()) store.saveProfiles({ ...profileIndex(), ...store.appearanceOf(state.settings) });
+      target = store.createProfile(fp.name, store.appearanceOf(state.settings));
       created += 1;
       isNew = true;
     }
-    const current = { records: store.loadRecordsFor(target.id), settings: store.loadSettingsFor(target.id) };
+    const current = { records: store.loadRecordsFor(target.id), settings: store.loadSettingsFor(target.id), notes: store.loadNotesFor(target.id) };
     // A profile created from the file takes all its settings (pay cycle, currency…), not the blank defaults.
     const result = store.importBackup(current, fp.parsed, isNew ? 'replace' : mode);
     store.saveRecordsFor(target.id, result.records);
     store.saveSettingsFor(target.id, result.settings);
-    lines.push(`${target.name}: ${result.summary.added} record(s)${result.summary.duplicates ? `, ${result.summary.duplicates} duplicate(s) skipped` : ''}`);
+    // Only this profile's notes change, and only if the file has notes for it.
+    store.saveNotesFor(target.id, result.notes);
+    lines.push(`${target.name}: ${result.summary.added} record(s)${result.summary.duplicates ? `, ${result.summary.duplicates} duplicate(s) skipped` : ''}${result.summary.notesAdded ? `, ${result.summary.notesAdded} note(s)` : ''}`);
   }
   state.records = store.loadRecords();
   state.settings = store.loadSettings();
+  state.notes = store.loadNotes();
   state.modal = null;
   showToast(`Imported ${fileProfiles.length} profile(s)${created ? ` (${created} new)` : ''} — ${lines.join('; ')}.`);
 }
@@ -4517,6 +4928,7 @@ function importSummaryMessage(mode, sum) {
   if (sum.jobsAdded.length) parts.push(`Added job${sum.jobsAdded.length === 1 ? '' : 's'}: ${sum.jobsAdded.join(', ')}.`);
   if (sum.jobsMatched.length) parts.push(`Matched by name: ${sum.jobsMatched.join(', ')}.`);
   if (sum.optionsAdded.length) parts.push(`Added option${sum.optionsAdded.length === 1 ? '' : 's'}: ${sum.optionsAdded.join(', ')}.`);
+  if (sum.notesAdded) parts.push(`${mode === 'replace' ? 'Restored' : 'Added'} ${sum.notesAdded} note${sum.notesAdded === 1 ? '' : 's'}.`);
   return parts.join(' ');
 }
 
@@ -4532,6 +4944,7 @@ function handleImport(mode) {
       // and settings back exactly as they were.
       const previousRecords = state.records;
       const previousSettings = state.settings;
+      const previousNotes = state.notes;
       try {
         const file = store.parseBackupFile(String(reader.result));
         if (file.kind === 'all') {
@@ -4544,17 +4957,20 @@ function handleImport(mode) {
         // Jobs in the file are created (or matched by name) automatically,
         // and imported settings are validated like stored ones — see
         // storage.js#importBackup.
-        const result = store.importBackup({ records: state.records, settings: state.settings }, parsed, mode);
+        const result = store.importBackup({ records: state.records, settings: state.settings, notes: state.notes }, parsed, mode);
         state.records = result.records;
         state.settings = result.settings;
+        state.notes = result.notes;
         showToast(importSummaryMessage(mode, result.summary));
-        persist();
+        if (persist()) store.saveNotes(state.notes);
         state.modal = null;
         render();
       } catch (err) {
-        if (state.records !== previousRecords || state.settings !== previousSettings) {
+        if (state.records !== previousRecords || state.settings !== previousSettings || state.notes !== previousNotes) {
           state.records = previousRecords;
           state.settings = previousSettings;
+          state.notes = previousNotes;
+          try { store.saveNotes(previousNotes); } catch { /* storage already reported */ }
           try { persist(); } catch { /* storage already reported */ }
           state.modal = null;
           render();
@@ -4796,6 +5212,35 @@ function wireSettingsContentEvents() {
     persist();
     render();
   });
+  document.querySelectorAll('input[name="s-visual-theme"]').forEach((radio) =>
+    radio.addEventListener('change', () => {
+      if (!radio.checked || radio.value === state.settings.visualTheme) return;
+      state.settings = { ...state.settings, visualTheme: radio.value };
+      persist();
+      // Cross-fade the colour change instead of snapping (skipped for reduced motion).
+      document.documentElement.classList.add('is-theme-changing');
+      clearTimeout(themeChangeTimer);
+      themeChangeTimer = setTimeout(() => document.documentElement.classList.remove('is-theme-changing'), 420);
+      const value = radio.value;
+      focusAfterRender = () => document.querySelector(`input[name="s-visual-theme"][value="${value}"]`);
+      render();
+    })
+  );
+  const glass = document.getElementById('s-header-glass');
+  if (glass) {
+    // Live preview while dragging; saved (once) when the slider is released.
+    glass.addEventListener('input', () => {
+      setHeaderTransparencyVar(glass.value);
+      const label = headerTransparencyLabel(glass.value);
+      glass.setAttribute('aria-valuetext', label);
+      const out = document.getElementById('s-header-glass-value');
+      if (out) out.textContent = label;
+    });
+    glass.addEventListener('change', () => {
+      state.settings = { ...state.settings, headerTransparency: store.normalizeHeaderTransparency(glass.value) };
+      persist();
+    });
+  }
   document.getElementById('s-default-start')?.addEventListener('change', (e) => {
     state.settings = { ...state.settings, defaults: { ...state.settings.defaults, startTime: e.target.value } };
     persist();
@@ -4866,6 +5311,7 @@ function wireRecordControls(scope) {
 }
 
 function wireEvents() {
+  wireNotesEvents();
   document.getElementById('btn-theme')?.addEventListener('click', () => {
     const current = state.settings.theme === 'dark' ? 'light' : 'dark';
     state.settings = { ...state.settings, theme: current };
@@ -5092,16 +5538,18 @@ function formBusy() {
 function syncFromOtherTab(e) {
   if (e.storageArea !== localStorage) return;
   const id = store.getActiveProfileId();
-  if (e.key !== null && e.key !== store.recordsKeyFor(id) && e.key !== store.settingsKeyFor(id) && e.key !== store.PROFILES_KEY) return;
+  if (e.key !== null && e.key !== store.recordsKeyFor(id) && e.key !== store.settingsKeyFor(id) && e.key !== store.notesKeyFor(id) && e.key !== store.PROFILES_KEY) return;
   // This profile was deleted in another tab: fall back to the first one.
   if (!store.loadProfiles().profiles.some((p) => p.id === id)) store.setActiveProfile(store.DEFAULT_PROFILE_ID);
   state.records = store.loadRecords();
   state.settings = store.loadSettings();
+  state.notes = store.loadNotes();
+  if (state.noteEditingId && !state.notes.some((n) => n.id === state.noteEditingId)) state.noteEditingId = null;
   if (state.editingId && !state.records.some((r) => r.id === state.editingId)) state.editingId = null;
   // Never rebuild the page under someone who is filling in the form or has a
   // dialog open: the other tab's change is shown at the next render (saving
   // the record, closing the dialog, or leaving an untouched form).
-  if (state.modal || formBusy()) {
+  if (state.modal || formBusy() || state.noteEditingId) {
     externalChangePending = true;
     return;
   }
@@ -5120,4 +5568,5 @@ document.addEventListener('focusout', () => {
 });
 
 initPickerGlobalListeners();
+window.addEventListener('hashchange', onHashChange);
 render();

@@ -20,6 +20,7 @@ import { normalizeJob, findJob, makeJobId } from './jobs.js';
 
 export const RECORDS_KEY = 'modern_work_hours_tracker_v1';
 export const SETTINGS_KEY = 'modern_work_hours_tracker_v1_settings';
+export const NOTES_KEY = 'modern_work_hours_tracker_v1_notes';
 const SCHEMA_VERSION = 1;
 
 const slugify = (label) =>
@@ -40,6 +41,10 @@ function defaultSettings() {
     schemaVersion: SCHEMA_VERSION,
     currency: 'AUD',
     theme: 'system', // 'system' | 'light' | 'dark'
+    // Visual theme (colour family) on top of light/dark — see APPEARANCE.
+    visualTheme: 'classic', // 'classic' | 'retro' | 'minimal' | 'cyberpunk'
+    // Top bar glass: 0 = most solid … 100 = most see-through.
+    headerTransparency: DEFAULT_HEADER_TRANSPARENCY,
     // Pay-cycle length in days: 7 | 14 | 30. Drives calculations.js's
     // automatic cycle grouping — see getCycleForDate(). 14 (fortnight)
     // matches the app's original hard-coded assumption, so an upgrade
@@ -224,8 +229,10 @@ let activeProfileId = DEFAULT_PROFILE_ID;
 
 export const recordsKeyFor = (id) => (id === DEFAULT_PROFILE_ID ? RECORDS_KEY : `${RECORDS_KEY}__${id}`);
 export const settingsKeyFor = (id) => (id === DEFAULT_PROFILE_ID ? SETTINGS_KEY : `${SETTINGS_KEY}__${id}`);
+export const notesKeyFor = (id) => (id === DEFAULT_PROFILE_ID ? NOTES_KEY : `${NOTES_KEY}__${id}`);
 
-/** { active, profiles: [{ id, name }], theme? } — always at least the first profile. */
+/** { active, profiles: [{ id, name }], theme?, visualTheme?, headerTransparency? }
+ *  — always at least the first profile. */
 export function loadProfiles() {
   const raw = safeParse(localStorage.getItem(PROFILES_KEY), null);
   const list = Array.isArray(raw?.profiles)
@@ -235,9 +242,7 @@ export function loadProfiles() {
     : [];
   if (!list.some((p) => p.id === DEFAULT_PROFILE_ID)) list.unshift({ id: DEFAULT_PROFILE_ID, name: DEFAULT_PROFILE_NAME });
   const active = list.some((p) => p.id === raw?.active) ? raw.active : DEFAULT_PROFILE_ID;
-  const out = { active, profiles: list };
-  if (['system', 'light', 'dark'].includes(raw?.theme)) out.theme = raw.theme;
-  return out;
+  return { active, profiles: list, ...pickAppearance(raw) };
 }
 
 export function saveProfiles(index) {
@@ -252,9 +257,9 @@ export function setActiveProfile(id) {
   return activeProfileId;
 }
 
-/** Add a profile (empty records; settings start from the defaults with the
- *  current theme and currency). Returns the new profile. */
-export function createProfile(name, { theme, currency } = {}) {
+/** Add a profile (empty records and notes; settings start from the defaults
+ *  with the current appearance and currency). Returns the new profile. */
+export function createProfile(name, { theme, visualTheme, headerTransparency, currency } = {}) {
   const index = loadProfiles();
   const clean = String(name || '').trim().slice(0, 40) || 'New profile';
   const ids = index.profiles.map((p) => p.id);
@@ -265,10 +270,12 @@ export function createProfile(name, { theme, currency } = {}) {
     id = `${id}-${n}`;
   }
   const profile = { id, name: clean };
-  const settings = normalizeSettings({ ...(theme ? { theme } : {}), ...(currency ? { currency } : {}) });
+  const appearance = pickAppearance({ theme, visualTheme, headerTransparency });
+  const settings = normalizeSettings({ ...appearance, ...(currency ? { currency } : {}) });
   localStorage.setItem(recordsKeyFor(id), '[]');
   localStorage.setItem(settingsKeyFor(id), JSON.stringify({ ...settings, schemaVersion: SCHEMA_VERSION }));
-  saveProfiles({ ...index, profiles: [...index.profiles, profile], ...(theme ? { theme } : {}) });
+  localStorage.setItem(notesKeyFor(id), '[]');
+  saveProfiles({ ...index, profiles: [...index.profiles, profile], ...appearance });
   return profile;
 }
 
@@ -287,6 +294,7 @@ export function deleteProfile(id) {
   if (id === DEFAULT_PROFILE_ID || index.profiles.length < 2 || !index.profiles.some((p) => p.id === id)) return false;
   localStorage.removeItem(recordsKeyFor(id));
   localStorage.removeItem(settingsKeyFor(id));
+  localStorage.removeItem(notesKeyFor(id));
   const profiles = index.profiles.filter((p) => p.id !== id);
   saveProfiles({ ...index, profiles, active: index.active === id ? DEFAULT_PROFILE_ID : index.active });
   if (activeProfileId === id) activeProfileId = DEFAULT_PROFILE_ID;
@@ -306,8 +314,9 @@ export function loadRecordsFor(id) {
 }
 export function loadSettingsFor(id) {
   const settings = normalizeSettings(safeParse(localStorage.getItem(settingsKeyFor(id)), null));
-  const theme = loadProfiles().theme;
-  return theme ? { ...settings, theme } : settings;
+  // Shared appearance (kept in the profiles index once there are several).
+  const { theme, visualTheme, headerTransparency } = loadProfiles();
+  return { ...settings, ...pickAppearance({ theme, visualTheme, headerTransparency }) };
 }
 
 export function loadRecords() {
@@ -327,6 +336,36 @@ export function loadSettings() {
 }
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+// ---------------------------------------------------------------------
+// Appearance — light/dark `theme`, the `visualTheme` colour family and the
+// top bar's `headerTransparency`. All three are shared by every profile
+// (like the theme always was): once a second profile exists they are kept
+// in the profiles index and laid over each profile's own settings.
+// ---------------------------------------------------------------------
+export const VISUAL_THEMES = ['classic', 'retro', 'minimal', 'cyberpunk'];
+export const DEFAULT_HEADER_TRANSPARENCY = 45;
+const THEMES = ['system', 'light', 'dark'];
+export function normalizeHeaderTransparency(value) {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) && value !== '' && value !== null ? Math.min(100, Math.max(0, n)) : DEFAULT_HEADER_TRANSPARENCY;
+}
+/** Only the valid appearance fields of `src` (missing/invalid ones left out). */
+function pickAppearance(src) {
+  const out = {};
+  if (!isObject(src)) return out;
+  if (THEMES.includes(src.theme)) out.theme = src.theme;
+  if (VISUAL_THEMES.includes(src.visualTheme)) out.visualTheme = src.visualTheme;
+  if (src.headerTransparency !== undefined && src.headerTransparency !== null && Number.isFinite(Number(src.headerTransparency))) {
+    out.headerTransparency = normalizeHeaderTransparency(src.headerTransparency);
+  }
+  return out;
+}
+/** The appearance part of a settings object, for sharing between profiles. */
+export function appearanceOf(settings) {
+  return pickAppearance(settings);
+}
+
 const TIME_HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** Option lists (day types / payment types): keep only real entries. */
@@ -356,6 +395,8 @@ export function normalizeSettings(stored) {
     ...stored,
     currency,
     theme: ['system', 'light', 'dark'].includes(stored.theme) ? stored.theme : base.theme,
+    visualTheme: VISUAL_THEMES.includes(stored.visualTheme) ? stored.visualTheme : base.visualTheme,
+    headerTransparency: stored.headerTransparency === undefined ? base.headerTransparency : normalizeHeaderTransparency(stored.headerTransparency),
     dayTypes: normalizeOptionList(stored.dayTypes, base.dayTypes),
     paymentTypes: normalizeOptionList(stored.paymentTypes, base.paymentTypes),
     payCycleLengthDays: [7, 14, 30, 365].includes(Number(stored.payCycleLengthDays)) ? Number(stored.payCycleLengthDays) : base.payCycleLengthDays,
@@ -399,9 +440,62 @@ export function saveSettingsFor(id, settings) {
 
 export function saveSettings(settings) {
   saveSettingsFor(activeProfileId, settings);
-  // The theme is shared by all profiles once there is more than one.
+  // Appearance is shared by all profiles once there is more than one.
   const index = localStorage.getItem(PROFILES_KEY) ? loadProfiles() : null;
-  if (index && index.theme !== settings.theme && ['system', 'light', 'dark'].includes(settings.theme)) saveProfiles({ ...index, theme: settings.theme });
+  if (!index) return;
+  const shared = pickAppearance(settings);
+  if (Object.keys(shared).some((k) => index[k] !== shared[k])) saveProfiles({ ...index, ...shared });
+}
+
+// ---------------------------------------------------------------------
+// Quick notes — a short to-do style list per profile, stored like records
+// (NOTES_KEY for the first profile, NOTES_KEY__<id> for others).
+// { id, text, done, createdAt, updatedAt, doneAt? }
+// ---------------------------------------------------------------------
+export const NOTE_MAX_LENGTH = 2000;
+
+/** Clean any stored/imported list: drops entries without text, trims and
+ *  caps text, fills missing ids/dates, and never repeats an id. */
+export function normalizeNotes(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of list) {
+    if (!isObject(raw) || typeof raw.text !== 'string') continue;
+    const text = raw.text.trim().slice(0, NOTE_MAX_LENGTH);
+    if (!text) continue;
+    let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim().slice(0, 64) : makeNoteId();
+    while (seen.has(id)) id = makeNoteId();
+    seen.add(id);
+    const createdAt = typeof raw.createdAt === 'string' && !Number.isNaN(Date.parse(raw.createdAt)) ? raw.createdAt : new Date(0).toISOString();
+    const updatedAt = typeof raw.updatedAt === 'string' && !Number.isNaN(Date.parse(raw.updatedAt)) ? raw.updatedAt : createdAt;
+    const note = { id, text, done: raw.done === true, createdAt, updatedAt };
+    if (note.done && typeof raw.doneAt === 'string' && !Number.isNaN(Date.parse(raw.doneAt))) note.doneAt = raw.doneAt;
+    out.push(note);
+  }
+  return out;
+}
+
+export function makeNoteId() {
+  return `note-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Notes still to do — the number on the Notes badge. */
+export function pendingNoteCount(notes) {
+  return (Array.isArray(notes) ? notes : []).filter((n) => n && !n.done).length;
+}
+
+export function loadNotesFor(id) {
+  return normalizeNotes(safeParse(localStorage.getItem(notesKeyFor(id)), []));
+}
+export function saveNotesFor(id, notes) {
+  localStorage.setItem(notesKeyFor(id), JSON.stringify(normalizeNotes(notes)));
+}
+export function loadNotes() {
+  return loadNotesFor(activeProfileId);
+}
+export function saveNotes(notes) {
+  saveNotesFor(activeProfileId, notes);
 }
 
 export function makeOptionId(label) {
@@ -412,7 +506,7 @@ export function makeOptionId(label) {
 // Backup / restore
 // ---------------------------------------------------------------------
 
-export function buildBackup(records, settings, profileName = null) {
+export function buildBackup(records, settings, profileName = null, notes = null) {
   const jobs = Array.isArray(settings?.jobs) ? settings.jobs : [];
   return {
     app: 'WorkRoaster',
@@ -421,6 +515,8 @@ export function buildBackup(records, settings, profileName = null) {
     ...(profileName ? { profile: profileName } : {}),
     records: records.map((r) => backupRecord(r, jobs)),
     settings,
+    // Quick notes (newer backups). Older files have none — see importBackup.
+    ...(Array.isArray(notes) ? { notes: normalizeNotes(notes) } : {}),
   };
 }
 
@@ -433,8 +529,8 @@ export function buildAllProfilesBackup() {
     exportedAt: new Date().toISOString(),
     profiles: profiles.map((p) => {
       const settings = loadSettingsFor(p.id);
-      const one = buildBackup(loadRecordsFor(p.id), settings);
-      return { name: p.name, records: one.records, settings };
+      const one = buildBackup(loadRecordsFor(p.id), settings, null, loadNotesFor(p.id));
+      return { name: p.name, records: one.records, settings, notes: one.notes };
     }),
   };
 }
@@ -603,6 +699,9 @@ export function parseBackup(jsonText) {
     // buildBackup) — lets import put a record under the right job even
     // when the file's job list is missing it.
     jobNames: data.records.map((r) => (typeof r.jobName === 'string' && r.jobName.trim() ? r.jobName.trim() : null)),
+    // Quick notes: null when the file has none (an older backup), so import
+    // can tell "no notes in this file" from "an empty notes list".
+    notes: Array.isArray(data.notes) ? normalizeNotes(data.notes) : null,
   };
 }
 
@@ -660,7 +759,7 @@ export function importBackup(current, parsed, mode) {
   const fileJobs = Array.isArray(fileSettings?.jobs) ? fileSettings.jobs.filter(isPlainObject).map(normalizeJob) : [];
   let settings = mode === 'replace' && fileSettings ? normalizeSettings({ ...current.settings, ...fileSettings }) : normalizeSettings(current.settings);
   const jobs = [...settings.jobs];
-  const summary = { added: 0, duplicates: 0, jobsAdded: [], jobsMatched: [], optionsAdded: [] };
+  const summary = { added: 0, duplicates: 0, jobsAdded: [], jobsMatched: [], optionsAdded: [], notesAdded: 0 };
   const idMap = new Map(); // file job id -> job id on this device
 
   const findByName = (name) => jobs.find((j) => nameKey(j.name) === nameKey(name) && nameKey(name));
@@ -739,7 +838,32 @@ export function importBackup(current, parsed, mode) {
   }
   summary.jobsAdded = [...new Set(summary.jobsAdded)];
   summary.jobsMatched = [...new Set(summary.jobsMatched)];
-  return { records, settings: normalizeSettings(settings), summary };
+  // Quick notes. A backup without notes (made before notes existed) imports
+  // none and leaves this profile's notes as they are, in either mode.
+  // Replace swaps in the file's notes; merge adds the ones not already here
+  // (same id, or the same text and done state).
+  const currentNotes = normalizeNotes(current.notes);
+  let notes = currentNotes;
+  if (Array.isArray(parsed.notes)) {
+    if (mode === 'replace') {
+      notes = normalizeNotes(parsed.notes);
+      summary.notesAdded = notes.length;
+    } else {
+      const ids = new Set(currentNotes.map((n) => n.id));
+      const keys = new Set(currentNotes.map((n) => `${n.done}|${nameKey(n.text)}`));
+      const added = [];
+      for (const n of normalizeNotes(parsed.notes)) {
+        const key = `${n.done}|${nameKey(n.text)}`;
+        if (ids.has(n.id) || keys.has(key)) continue;
+        ids.add(n.id);
+        keys.add(key);
+        added.push(n);
+      }
+      notes = [...currentNotes, ...added];
+      summary.notesAdded = added.length;
+    }
+  }
+  return { records, settings: normalizeSettings(settings), summary, notes };
 }
 
 /** Merge imported records into the current set, skipping duplicate ids. */
