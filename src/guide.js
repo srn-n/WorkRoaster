@@ -385,7 +385,7 @@ export const GUIDE_SECTIONS = [
             <li>Each cycle's <em>PDF / JPG / Excel</em> buttons export <strong>every record in that cycle</strong>.</li>
             <li>Each job group inside a cycle has its own buttons for <strong>just that job's records</strong> in that cycle.</li>
           </ul>
-          <p>Reports lead with <strong>Total pay</strong>, then working time, average rate and record count, followed by a table: date, day, <strong>Active hour</strong> (e.g. 8:00 AM – 12:30 PM, or “From 9:00 AM” when only a duration was entered), duration, break, day and payment type, mode (<em>Hourly</em>, <em>Actual</em>, <em>Monthly</em> or <em>Yearly</em>), pay, rate per hour and — when any record has them — notes, with a closing total row. For a salaried record, pay is the day's salary share and the rate is its effective hourly rate; reports that contain salaried shifts also show a <strong>Base salary</strong> line (e.g. “Base salary — Office Administrator: A$4,840.00 / month”). Each carries a small credit line: <em>WorkRoaster · github.com/srn-n</em>.</p>
+          <p>Reports lead with <strong>Total pay</strong>, then working time, average rate and record count, followed by a table: date, day, <strong>Active hour</strong> (e.g. 8:00 AM – 12:30 PM, or “From 9:00 AM” when only a duration was entered), duration, break, day and payment type, mode (<em>Hourly</em>, <em>Actual</em>, <em>Monthly</em> or <em>Yearly</em>), pay, rate per hour and — when any record has them — notes, with a closing total row. For a salaried record, pay is the day's salary share and the rate is its effective hourly rate; reports that contain salaried shifts also show a <strong>Base salary</strong> line (e.g. “Base salary — Office Administrator: A$4,840.00 / month”). Each carries a small credit line: <em>WorkRoaster · linkedin.com/in/samiur-rahman23</em>.</p>
           <p>Before each PDF, JPG or Excel file is made, an <strong>Export options</strong> window lets you choose what goes in it: <em>Base salary</em>, <em>Time</em> (start and end times), <em>Total hours worked</em> (durations, breaks and hours totals) and <em>Total amount</em> (every money figure — pay, rates, subtotals, totals, and base salary). Anything switched off is left out of the file completely. The choices start from <strong>Settings → General → Export</strong>; changing them in the window affects that one file only. JSON backups and CSV always include everything.</p>`,
       },
       {
@@ -434,6 +434,12 @@ export const GUIDE_SECTIONS = [
         keywords: 'profile profiles workspace side job side hustle switch separate rename delete',
         body: `<p>A <strong>profile</strong> is a separate set of records, jobs and settings (including the pay cycle) on this device — for example your main job with a Monday–Sunday cycle and a side hustle paid Tuesday–Monday. Add one in <strong>Settings → Profiles</strong>; once there are two, a <strong>Profile</strong> switcher appears at the top of the page. The theme is shared.</p>
           <p>The records you already had are the first profile, <em>My profile</em>. It can be renamed but not deleted. Deleting any other profile asks first and permanently erases its records, jobs and settings, so download a backup before you do. A profile isn't a login: anyone using this browser can switch between them.</p>`,
+      },
+      {
+        title: 'Appearance: themes, top bar and motion',
+        keywords: 'appearance theme themes sky sage plum dark light mode colour color glass top bar transparency motion bounce bouncy smooth minimal animation',
+        body: `<p><strong>Settings → Appearance</strong> changes how WorkRoaster looks — never your data. Pick a <strong>visual theme</strong> (WorkRoaster, Sky, Sage or Plum); each has a light and a dark version with the same colours, and <strong>Light or dark</strong> chooses between them (or follows your device).</p>
+          <p><strong>Top bar transparency</strong> sets how much of the page shows through the floating glass bar. <strong>Motion &amp; bounce</strong> sets how things move: <em>Bouncy</em> (springy presses and pop-in menus), <em>Smooth</em> (no overshoot) or <em>Minimal</em> (no movement). If your device asks for reduced motion or reduced transparency, WorkRoaster follows it. Appearance is shared by all profiles.</p>`,
       },
     ],
   },

@@ -263,6 +263,30 @@ function applyTheme() {
   if (visual && visual !== 'classic') root.setAttribute('data-visual', visual);
   else root.removeAttribute('data-visual');
   setHeaderTransparencyVar(state.settings.headerTransparency);
+  setMotionStyle(state.settings.motionStyle);
+}
+
+/** Interaction feel → <html data-motion> (styles.css swaps the easing curves). */
+function setMotionStyle(value) {
+  const style = store.MOTION_STYLES.includes(value) ? value : store.DEFAULT_MOTION_STYLE;
+  document.documentElement.setAttribute('data-motion', style);
+}
+
+/** One-shot "just chosen" pop on a radio's card (only on the render that
+ *  follows the choice, so later re-renders never replay it). Returns the input. */
+function justSelected(input) {
+  const card = input?.closest('label');
+  if (card && !motionReduced()) {
+    card.classList.add('is-just-selected');
+    card.addEventListener('animationend', () => card.classList.remove('is-just-selected'), { once: true });
+  }
+  return input;
+}
+
+/** True when movement should be skipped: the device asks for reduced
+ *  motion, or Settings → Appearance → Motion is "Minimal". */
+function motionReduced() {
+  return state.settings?.motionStyle === 'minimal' || !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 }
 
 /** 0 … 100 → --header-transparency 0 … 1 (styles.css turns it into tint and blur). */
@@ -273,9 +297,14 @@ function setHeaderTransparencyVar(value) {
 
 const VISUAL_THEME_CHOICES = [
   { id: 'classic', name: 'WorkRoaster', blurb: 'Warm paper and bronze — the original look.' },
-  { id: 'retro', name: 'Retro', blurb: 'Cream stock, burnt orange and teal, like an old ledger.' },
-  { id: 'minimal', name: 'Modern', blurb: 'Quiet neutrals with one punchy cobalt accent.' },
-  { id: 'cyberpunk', name: 'Cyberpunk', blurb: 'Ink-dark violet with magenta and cyan signals.' },
+  { id: 'sky', name: 'Sky', blurb: 'Cool blue glass over soft graphite — crisp and calm.' },
+  { id: 'sage', name: 'Sage', blurb: 'Misty green surfaces with a deep emerald accent.' },
+  { id: 'plum', name: 'Plum', blurb: 'Rosy glass and a rich plum accent, warm in both modes.' },
+];
+const MOTION_STYLE_CHOICES = [
+  { id: 'bouncy', name: 'Bouncy', blurb: 'Springy presses, pop-in menus and dialogs.' },
+  { id: 'smooth', name: 'Smooth', blurb: 'The same motion, gently eased with no overshoot.' },
+  { id: 'minimal', name: 'Minimal', blurb: 'No movement — things appear instantly.' },
 ];
 const headerTransparencyLabel = (v) => {
   const n = store.normalizeHeaderTransparency(v);
@@ -928,7 +957,7 @@ function refreshCalendar({ direction = 0, focusDate = null } = {}) {
   const hint = document.getElementById('calendar-hint');
   if (hint) hint.textContent = calendarHint();
   const grid = document.getElementById('calendar-grid');
-  if (direction && grid && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+  if (direction && grid && !motionReduced()) {
     grid.classList.add(direction < 0 ? 'is-nav-prev' : 'is-nav-next');
   }
   if (focusDate) body.querySelector(`[data-cal-date="${focusDate}"]`)?.focus();
@@ -2563,6 +2592,7 @@ function settingsTabContent(tab) {
     </fieldset>`;
 
   const visualNow = state.settings.visualTheme || 'classic';
+  const motionNow = store.MOTION_STYLES.includes(state.settings.motionStyle) ? state.settings.motionStyle : store.DEFAULT_MOTION_STYLE;
   const appearanceTab = `
     <fieldset class="field-group appearance-themes">
       <legend>Visual theme</legend>
@@ -2586,6 +2616,18 @@ function settingsTabContent(tab) {
       </div>
       <small class="field-help" id="s-header-glass-help"><output id="s-header-glass-value" for="s-header-glass">${esc(headerTransparencyLabel(state.settings.headerTransparency))}</output>. How much of the page shows through the top bar as you scroll. Text and buttons stay readable at every setting; browsers without blur keep a solid bar.</small>
     </div>
+    <fieldset class="field-group appearance-motion">
+      <legend>Motion &amp; bounce</legend>
+      <p class="field-help" id="s-motion-help">How buttons, menus and dialogs move. If your device is set to reduce motion, WorkRoaster always stays still.</p>
+      <div class="segmented" role="radiogroup" aria-describedby="s-motion-help">
+        ${MOTION_STYLE_CHOICES.map((m) => `
+        <label class="segmented-option ${motionNow === m.id ? 'is-selected' : ''}">
+          <input type="radio" name="s-motion-style" value="${m.id}" ${motionNow === m.id ? 'checked' : ''} aria-describedby="s-motion-${m.id}-desc">
+          <span class="segmented-name">${esc(m.name)}</span>
+          <span class="segmented-desc" id="s-motion-${m.id}-desc">${esc(m.blurb)}</span>
+        </label>`).join('')}
+      </div>
+    </fieldset>
     <div class="field">
       <label for="s-theme">Light or dark</label>
       <div class="select-control select-plain">
@@ -5056,7 +5098,7 @@ function navigateSettingsTab(nextTab) {
 function playSettingsContentEnter(content, direction) {
   clearTimeout(settingsMotionFallbackTimer);
   content.classList.remove('is-motion-fallback');
-  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+  if (motionReduced()) {
     document.documentElement.style.removeProperty('--settings-motion-direction');
     return;
   }
@@ -5172,7 +5214,7 @@ function wireSettingsContentEvents() {
       setJobFormMode(form, input.value);
       // Soft fade for the newly shown fields — only on a real mode switch,
       // never when the tab/pane itself appears (one click, one animation).
-      if (form && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      if (form && !motionReduced()) {
         form.classList.remove('is-mode-switching');
         void form.offsetWidth;
         form.classList.add('is-mode-switching');
@@ -5222,7 +5264,17 @@ function wireSettingsContentEvents() {
       clearTimeout(themeChangeTimer);
       themeChangeTimer = setTimeout(() => document.documentElement.classList.remove('is-theme-changing'), 420);
       const value = radio.value;
-      focusAfterRender = () => document.querySelector(`input[name="s-visual-theme"][value="${value}"]`);
+      focusAfterRender = () => justSelected(document.querySelector(`input[name="s-visual-theme"][value="${value}"]`));
+      render();
+    })
+  );
+  document.querySelectorAll('input[name="s-motion-style"]').forEach((radio) =>
+    radio.addEventListener('change', () => {
+      if (!radio.checked || radio.value === state.settings.motionStyle) return;
+      state.settings = { ...state.settings, motionStyle: radio.value };
+      persist();
+      const value = radio.value;
+      focusAfterRender = () => justSelected(document.querySelector(`input[name="s-motion-style"][value="${value}"]`));
       render();
     })
   );

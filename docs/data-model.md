@@ -533,6 +533,17 @@ field-by-field, so a settings object saved by an older version of this
 app (missing a field a newer version added) is filled in rather than
 rejected.
 
+**Appearance.** `settings.theme` (`system | light | dark`),
+`settings.visualTheme` (`classic | sky | sage | plum`),
+`settings.headerTransparency` (0–100, default 45) and
+`settings.motionStyle` (`bouncy | smooth | minimal`, default `bouncy`).
+`app.js#applyTheme()` turns them into `<html data-theme data-visual
+data-motion>` and the `--header-transparency` variable. Any unknown value
+falls back to the default — so a theme saved by an older build (`retro`,
+`minimal`, `cyberpunk`, which were replaced by Sky, Sage and Plum) opens
+in the classic WorkRoaster theme. `minimal` motion behaves like the
+device's reduce-motion setting. None of these touch records.
+
 **Currency.** Settings only saves an active ISO 4217 code from the list
 in `src/currency.js` (a code Intl can merely *format*, like `ZZZ`, is not
 enough). Invalid input shows a message and nothing is saved. A code
@@ -572,7 +583,8 @@ A profile is a separate set of records and settings. The index lives in
     { "id": "default", "name": "My profile" },
     { "id": "side-job", "name": "Side job" } // id: [a-z0-9-], ≤ 24 chars, from the name
   ],
-  "theme": "dark"                        // shared by every profile
+  "theme": "dark",                       // appearance, shared by every profile:
+  "visualTheme": "sky", "headerTransparency": 45, "motionStyle": "bouncy"
 }
 ```
 
@@ -585,8 +597,9 @@ A profile is a separate set of records and settings. The index lives in
   back to `default`.
 - `default` can be renamed but not deleted. Deleting another profile
   removes both of its keys.
-- `theme` is shared: `saveSettings` also writes it to the index, and
-  `loadSettingsFor` overlays it on each profile's own settings.
+- Appearance (`theme`, `visualTheme`, `headerTransparency`,
+  `motionStyle`) is shared: `saveSettings` also writes it to the index,
+  and `loadSettingsFor` overlays it on each profile's own settings.
 - Two open tabs listen to the active profile's keys and the index; if the
   open profile is deleted in another tab, the page falls back to `default`.
 

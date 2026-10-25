@@ -42,9 +42,12 @@ function defaultSettings() {
     currency: 'AUD',
     theme: 'system', // 'system' | 'light' | 'dark'
     // Visual theme (colour family) on top of light/dark — see APPEARANCE.
-    visualTheme: 'classic', // 'classic' | 'retro' | 'minimal' | 'cyberpunk'
+    visualTheme: 'classic', // 'classic' | 'sky' | 'sage' | 'plum'
     // Top bar glass: 0 = most solid … 100 = most see-through.
     headerTransparency: DEFAULT_HEADER_TRANSPARENCY,
+    // Interaction feel: springy 'bouncy' (default), calmer 'smooth', or
+    // 'minimal' (no movement, like the device's reduce-motion setting).
+    motionStyle: DEFAULT_MOTION_STYLE,
     // Pay-cycle length in days: 7 | 14 | 30. Drives calculations.js's
     // automatic cycle grouping — see getCycleForDate(). 14 (fortnight)
     // matches the app's original hard-coded assumption, so an upgrade
@@ -231,7 +234,7 @@ export const recordsKeyFor = (id) => (id === DEFAULT_PROFILE_ID ? RECORDS_KEY : 
 export const settingsKeyFor = (id) => (id === DEFAULT_PROFILE_ID ? SETTINGS_KEY : `${SETTINGS_KEY}__${id}`);
 export const notesKeyFor = (id) => (id === DEFAULT_PROFILE_ID ? NOTES_KEY : `${NOTES_KEY}__${id}`);
 
-/** { active, profiles: [{ id, name }], theme?, visualTheme?, headerTransparency? }
+/** { active, profiles: [{ id, name }], theme?, visualTheme?, headerTransparency?, motionStyle? }
  *  — always at least the first profile. */
 export function loadProfiles() {
   const raw = safeParse(localStorage.getItem(PROFILES_KEY), null);
@@ -259,7 +262,7 @@ export function setActiveProfile(id) {
 
 /** Add a profile (empty records and notes; settings start from the defaults
  *  with the current appearance and currency). Returns the new profile. */
-export function createProfile(name, { theme, visualTheme, headerTransparency, currency } = {}) {
+export function createProfile(name, { theme, visualTheme, headerTransparency, motionStyle, currency } = {}) {
   const index = loadProfiles();
   const clean = String(name || '').trim().slice(0, 40) || 'New profile';
   const ids = index.profiles.map((p) => p.id);
@@ -270,7 +273,7 @@ export function createProfile(name, { theme, visualTheme, headerTransparency, cu
     id = `${id}-${n}`;
   }
   const profile = { id, name: clean };
-  const appearance = pickAppearance({ theme, visualTheme, headerTransparency });
+  const appearance = pickAppearance({ theme, visualTheme, headerTransparency, motionStyle });
   const settings = normalizeSettings({ ...appearance, ...(currency ? { currency } : {}) });
   localStorage.setItem(recordsKeyFor(id), '[]');
   localStorage.setItem(settingsKeyFor(id), JSON.stringify({ ...settings, schemaVersion: SCHEMA_VERSION }));
@@ -315,8 +318,8 @@ export function loadRecordsFor(id) {
 export function loadSettingsFor(id) {
   const settings = normalizeSettings(safeParse(localStorage.getItem(settingsKeyFor(id)), null));
   // Shared appearance (kept in the profiles index once there are several).
-  const { theme, visualTheme, headerTransparency } = loadProfiles();
-  return { ...settings, ...pickAppearance({ theme, visualTheme, headerTransparency }) };
+  const { theme, visualTheme, headerTransparency, motionStyle } = loadProfiles();
+  return { ...settings, ...pickAppearance({ theme, visualTheme, headerTransparency, motionStyle }) };
 }
 
 export function loadRecords() {
@@ -338,13 +341,18 @@ export function loadSettings() {
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 // ---------------------------------------------------------------------
-// Appearance — light/dark `theme`, the `visualTheme` colour family and the
-// top bar's `headerTransparency`. All three are shared by every profile
+// Appearance — light/dark `theme`, the `visualTheme` colour family, the
+// top bar's `headerTransparency` and the `motionStyle` interaction feel.
+// All four are shared by every profile
 // (like the theme always was): once a second profile exists they are kept
 // in the profiles index and laid over each profile's own settings.
 // ---------------------------------------------------------------------
-export const VISUAL_THEMES = ['classic', 'retro', 'minimal', 'cyberpunk'];
+// Retro / Modern / Cyberpunk were replaced by Sky / Sage / Plum; a saved
+// old theme isn't in this list, so it falls back to the classic look.
+export const VISUAL_THEMES = ['classic', 'sky', 'sage', 'plum'];
 export const DEFAULT_HEADER_TRANSPARENCY = 45;
+export const MOTION_STYLES = ['bouncy', 'smooth', 'minimal'];
+export const DEFAULT_MOTION_STYLE = 'bouncy';
 const THEMES = ['system', 'light', 'dark'];
 export function normalizeHeaderTransparency(value) {
   const n = Math.round(Number(value));
@@ -356,6 +364,7 @@ function pickAppearance(src) {
   if (!isObject(src)) return out;
   if (THEMES.includes(src.theme)) out.theme = src.theme;
   if (VISUAL_THEMES.includes(src.visualTheme)) out.visualTheme = src.visualTheme;
+  if (MOTION_STYLES.includes(src.motionStyle)) out.motionStyle = src.motionStyle;
   if (src.headerTransparency !== undefined && src.headerTransparency !== null && Number.isFinite(Number(src.headerTransparency))) {
     out.headerTransparency = normalizeHeaderTransparency(src.headerTransparency);
   }
@@ -396,6 +405,7 @@ export function normalizeSettings(stored) {
     currency,
     theme: ['system', 'light', 'dark'].includes(stored.theme) ? stored.theme : base.theme,
     visualTheme: VISUAL_THEMES.includes(stored.visualTheme) ? stored.visualTheme : base.visualTheme,
+    motionStyle: MOTION_STYLES.includes(stored.motionStyle) ? stored.motionStyle : base.motionStyle,
     headerTransparency: stored.headerTransparency === undefined ? base.headerTransparency : normalizeHeaderTransparency(stored.headerTransparency),
     dayTypes: normalizeOptionList(stored.dayTypes, base.dayTypes),
     paymentTypes: normalizeOptionList(stored.paymentTypes, base.paymentTypes),

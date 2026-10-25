@@ -19,10 +19,10 @@ import ExcelJS from 'exceljs';
 import * as calc from './calculations.js';
 
 const APP_TITLE = 'WorkRoaster';
-// The author's GitHub profile, not the repository — the repo may become
-// private, and an export must never point at a dead or exposed link.
-const PROFILE_URL = 'https://github.com/srn-n';
-const PROFILE_LABEL = 'github.com/srn-n';
+// The author's LinkedIn profile (never a repository link — the repo is
+// private, and an export must never point at a dead or exposed link).
+const PROFILE_URL = 'https://www.linkedin.com/in/samiur-rahman23/';
+const PROFILE_LABEL = 'linkedin.com/in/samiur-rahman23';
 const WATERMARK_PLAIN = `WorkRoaster · ${PROFILE_LABEL}`;
 
 const BASE_COLUMNS = [

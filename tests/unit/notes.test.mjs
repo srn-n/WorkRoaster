@@ -116,7 +116,12 @@ test('appearance: older settings get the classic theme and default transparency;
   assert.equal(s.visualTheme, 'classic');
   assert.equal(s.headerTransparency, store.DEFAULT_HEADER_TRANSPARENCY);
   assert.equal(store.normalizeSettings({ visualTheme: 'vaporwave' }).visualTheme, 'classic');
-  assert.equal(store.normalizeSettings({ visualTheme: 'cyberpunk' }).visualTheme, 'cyberpunk');
+  for (const t of ['sky', 'sage', 'plum']) assert.equal(store.normalizeSettings({ visualTheme: t }).visualTheme, t);
+  // Retired themes (replaced by Sky / Sage / Plum) open in the classic look.
+  for (const t of ['retro', 'minimal', 'cyberpunk']) assert.equal(store.normalizeSettings({ visualTheme: t }).visualTheme, 'classic', t);
+  assert.equal(s.motionStyle, 'bouncy', 'older settings get bouncy motion');
+  for (const m of ['bouncy', 'smooth', 'minimal']) assert.equal(store.normalizeSettings({ motionStyle: m }).motionStyle, m);
+  for (const m of ['wobbly', 5, null]) assert.equal(store.normalizeSettings({ motionStyle: m }).motionStyle, 'bouncy', String(m));
   assert.equal(store.normalizeSettings({ headerTransparency: 140 }).headerTransparency, 100);
   assert.equal(store.normalizeSettings({ headerTransparency: -5 }).headerTransparency, 0);
   assert.equal(store.normalizeSettings({ headerTransparency: 'abc' }).headerTransparency, store.DEFAULT_HEADER_TRANSPARENCY);
@@ -124,13 +129,15 @@ test('appearance: older settings get the classic theme and default transparency;
 });
 
 test('appearance is shared by every profile, like the light/dark theme', () => {
-  store.saveSettings(store.normalizeSettings({ visualTheme: 'retro', headerTransparency: 70, theme: 'dark' }));
+  store.saveSettings(store.normalizeSettings({ visualTheme: 'sage', headerTransparency: 70, theme: 'dark', motionStyle: 'smooth' }));
   const side = store.createProfile('Side', store.appearanceOf(store.loadSettings()));
   store.setActiveProfile(side.id);
-  assert.equal(store.loadSettings().visualTheme, 'retro', 'a new profile starts with the current look');
-  store.saveSettings({ ...store.loadSettings(), visualTheme: 'minimal', headerTransparency: 20 });
+  assert.equal(store.loadSettings().visualTheme, 'sage', 'a new profile starts with the current look');
+  assert.equal(store.loadSettings().motionStyle, 'smooth', 'and the current motion');
+  store.saveSettings({ ...store.loadSettings(), visualTheme: 'plum', headerTransparency: 20, motionStyle: 'minimal' });
   store.setActiveProfile('default');
   const back = store.loadSettings();
-  assert.deepEqual([back.visualTheme, back.headerTransparency, back.theme], ['minimal', 20, 'dark']);
-  assert.equal(store.loadProfiles().visualTheme, 'minimal');
+  assert.deepEqual([back.visualTheme, back.headerTransparency, back.theme, back.motionStyle], ['plum', 20, 'dark', 'minimal']);
+  assert.equal(store.loadProfiles().visualTheme, 'plum');
+  assert.equal(store.loadProfiles().motionStyle, 'minimal');
 });
