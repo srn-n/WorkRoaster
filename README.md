@@ -39,17 +39,19 @@ fortnight all having with multiple profile for different paycycle.
 
 ## Screenshots
 
-<img width="1452" height="1287" alt="image" src="https://github.com/user-attachments/assets/0af72858-cb79-4646-8646-58e225737554" />
+The current pay cycle, totals and the work calendar, in the light and dark themes:
 
-<img width="985" height="883" alt="image" src="https://github.com/user-attachments/assets/fcd44029-e4a7-435a-9aaa-d9323e491fa9" />
+<img alt="WorkRoaster dashboard in the light theme: $588.64 earned this cycle, a bar for each shift, totals and the work calendar" src="docs/screenshots/dashboard-light.png" width="800" />
 
-<img width="982" height="862" alt="image" src="https://github.com/user-attachments/assets/ca525de4-4dad-45ba-918f-edc04a59a747" />
+<img alt="WorkRoaster dashboard in the dark theme" src="docs/screenshots/dashboard-dark.png" width="800" />
 
-<img width="1080" height="957" alt="image" src="https://github.com/user-attachments/assets/5b46b3d0-91b0-4fb5-a08d-67c317f03b29" />
+Adding a record, the built-in calculator and the pay-cycle history:
 
+<img alt="WorkRoaster record form, calculator and pay-cycle history with PDF, JPG and Excel exports" src="docs/screenshots/records-and-calculator.png" width="800" />
 
+On a phone:
 
-
+<img alt="WorkRoaster on a phone showing the current cycle" src="docs/screenshots/mobile.png" width="320" />
 
 ## Getting started
 
