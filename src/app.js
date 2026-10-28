@@ -2249,7 +2249,36 @@ const SETTINGS_CATEGORIES = [
   { id: 'options', label: 'Options' },
   { id: 'profiles', label: 'Profiles' },
   { id: 'feedback', label: 'Feedback' },
+  { id: 'legal', label: 'Privacy & terms' },
 ];
+
+// -- Privacy & terms tab --------------------------------------------------
+// Static text plus links to the full policies on the Simply Made Studio site.
+const LEGAL_LINKS = {
+  privacy: 'https://www.simplymadestudio.net/privacy#workroaster',
+  terms: 'https://www.simplymadestudio.net/terms#workroaster',
+  contact: 'samiurrahman1@proton.me',
+};
+
+function legalTab() {
+  return `
+    <div class="field">
+      <label>Your data stays on this device</label>
+      <small class="field-help">WorkRoaster has no accounts, ads, analytics or tracking. Your records, jobs, pay settings and profiles are saved in this browser's local storage and are never sent to us. Exports are created on your device and saved where you choose.</small>
+    </div>
+    <div class="field">
+      <label>Not financial advice</label>
+      <small class="field-help">WorkRoaster is a personal record-keeping tool, not payroll software. Its totals depend on what you enter, so check your actual pay against your payslip, your employment agreement and the relevant award or the Fair Work Ombudsman.</small>
+    </div>
+    <div class="field">
+      <label>Full policies</label>
+      <small class="field-help">
+        <a href="${LEGAL_LINKS.privacy}" target="_blank" rel="noopener">Privacy Policy</a> ·
+        <a href="${LEGAL_LINKS.terms}" target="_blank" rel="noopener">Terms of Use</a> ·
+        <a href="mailto:${LEGAL_LINKS.contact}">${LEGAL_LINKS.contact}</a>
+      </small>
+    </div>`;
+}
 
 // -- Feedback tab ---------------------------------------------------------
 // Transient, session-only UI state (same pattern as formOverrideMode etc.
@@ -2688,6 +2717,7 @@ function settingsTabContent(tab) {
   if (tab === 'jobs') return jobsTab();
   if (tab === 'profiles') return profilesTab();
   if (tab === 'feedback') return feedbackTab();
+  if (tab === 'legal') return legalTab();
   return { general: generalTab, appearance: appearanceTab, workflow: workflowTab, options: optionsTab }[tab] || generalTab;
 }
 

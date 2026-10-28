@@ -109,6 +109,16 @@ Because everything is local to one browser profile, records **do not**
 sync between devices or browsers on their own — use the JSON backup/
 restore in the "Backup & export" panel to move data between them.
 
+## Privacy & terms
+
+WorkRoaster has no accounts, ads, analytics or tracking, and nothing you enter is sent anywhere. The feedback form in Settings is not connected yet, so nothing typed there is sent either.
+
+- Privacy Policy: https://www.simplymadestudio.net/privacy#workroaster
+- Terms of Use: https://www.simplymadestudio.net/terms#workroaster
+- Both are linked in the app under Settings → Privacy & terms.
+
+WorkRoaster is a record-keeping tool, not payroll software, and does not give financial, tax or legal advice.
+
 ## Backup & restore
 
 Open **Backup & export** from the header:
