@@ -13,7 +13,7 @@ import * as calc from './calculations.js';
 import * as store from './storage.js';
 import * as opts from './settings.js';
 import * as jobs from './jobs.js';
-import { submitFeedback } from './feedback.js';
+import { buildFeedbackEmail, feedbackDeviceSummary, FEEDBACK_EMAIL, FEEDBACK_MAX_LENGTH } from './feedback.js';
 import { GUIDE_INTRO, GUIDE_SECTIONS } from './guide.js';
 import { renderCalculator, wireCalculator } from './calculator.js';
 import { isSupportedCurrency, normalizeCurrencyInput } from './currency.js';
@@ -264,6 +264,25 @@ function applyTheme() {
   else root.removeAttribute('data-visual');
   setHeaderTransparencyVar(state.settings.headerTransparency);
   setMotionStyle(state.settings.motionStyle);
+  syncBrowserBarColor();
+}
+
+/** Phone browsers tint their address bar / status bar with <meta
+ *  name="theme-color">; keep it the page colour of the theme in use
+ *  (including "Match system", which can change while the app is open). */
+function syncBrowserBarColor() {
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  if (!bg) return;
+  const metas = document.querySelectorAll('meta[name="theme-color"]');
+  metas.forEach((m, i) => {
+    if (i === 0) {
+      m.removeAttribute('media');
+      m.setAttribute('content', bg);
+    } else m.remove();
+  });
+}
+if (typeof window !== 'undefined' && window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => syncBrowserBarColor());
 }
 
 /** Interaction feel → <html data-motion> (styles.css swaps the easing curves). */
@@ -1188,6 +1207,7 @@ function openOptionPicker(id) {
   refreshOptionPickerBody();
   document.getElementById(`${id}-picker-popover`)?.classList.add('is-open');
   document.getElementById(`btn-${id}-picker`)?.setAttribute('aria-expanded', 'true');
+  revealPopover(document.getElementById(`${id}-picker-popover`));
 }
 
 function closeOptionPicker() {
@@ -1428,7 +1448,7 @@ function renderPayModeFields(payMode, job, editingRecord, useEndTime) {
               <label for="f-hourly-rate">Hourly rate</label>
               <div class="prefix-input">
                 <span class="prefix">${currencyPrefix}</span>
-                <input id="f-hourly-rate" type="number" min="0" step="0.01" placeholder="25.00" value="${editingRecord && !job ? editingRecord.hourlyRate : ''}">
+                <input id="f-hourly-rate" type="number" min="0" step="0.01" inputmode="decimal" placeholder="25.00" value="${editingRecord && !job ? editingRecord.hourlyRate : ''}">
               </div>
             </div>
             <div class="field job-pay-manual-field ${job ? 'is-hidden' : ''}">
@@ -1443,7 +1463,7 @@ function renderPayModeFields(payMode, job, editingRecord, useEndTime) {
               <label for="f-pay">Actual payment</label>
               <div class="prefix-input">
                 <span class="prefix">${currencyPrefix}</span>
-                <input id="f-pay" type="number" min="0" step="0.01" placeholder="0.00" value="${editingRecord ? editingRecord.paymentAmount : ''}">
+                <input id="f-pay" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" value="${editingRecord ? editingRecord.paymentAmount : ''}">
               </div>
             </div>
             <div class="field">
@@ -1682,7 +1702,7 @@ function renderForm() {
               </div>
               <div class="field">
                 <label for="f-override-value">Value</label>
-                <input id="f-override-value" type="number" step="0.01" min="0" value="${formOverrideRule.value}">
+                <input id="f-override-value" type="number" step="0.01" min="0" inputmode="decimal" value="${formOverrideRule.value}">
               </div>
             </div>
           </div>
@@ -2257,7 +2277,9 @@ const SETTINGS_CATEGORIES = [
 const LEGAL_LINKS = {
   privacy: 'https://www.simplymadestudio.net/privacy#workroaster',
   terms: 'https://www.simplymadestudio.net/terms#workroaster',
-  contact: 'samiurrahman1@proton.me',
+  studio: 'https://www.simplymadestudio.net/',
+  // One public contact address for the whole app (the same one Feedback uses).
+  contact: FEEDBACK_EMAIL,
 };
 
 function legalTab() {
@@ -2277,27 +2299,36 @@ function legalTab() {
         <a href="${LEGAL_LINKS.terms}" target="_blank" rel="noopener">Terms of Use</a> ·
         <a href="mailto:${LEGAL_LINKS.contact}">${LEGAL_LINKS.contact}</a>
       </small>
+    </div>
+    <div class="field">
+      <label>Made by Simply Made Studio</label>
+      <small class="field-help">WorkRoaster is designed and maintained by <a href="${LEGAL_LINKS.studio}" target="_blank" rel="noopener">Simply Made Studio</a>.</small>
     </div>`;
 }
 
 // -- Feedback tab ---------------------------------------------------------
-// Transient, session-only UI state (same pattern as formOverrideMode etc.
-// above) — a feedback draft is never persisted to localStorage or sent
-// anywhere until the user submits it. See feedback.js for why the actual
-// "submit" always honestly reports that delivery isn't connected yet.
+// Session-only UI state (same pattern as formOverrideMode etc. above): the
+// draft is never saved to localStorage. "Send feedback" opens the person's
+// own email app with the message addressed to FEEDBACK_EMAIL — nothing is
+// sent by WorkRoaster itself (see feedback.js).
 let feedbackDraft = '';
-let feedbackSubmitting = false;
-let feedbackStatus = null; // null | { ok: boolean, error?: string, notConnected?: boolean }
+let feedbackIncludeDevice = false;
+let feedbackStatus = null; // null | { ok: boolean, error?: string }
 
 function feedbackTab() {
   return `
     <div class="field">
       <label for="feedback-message">Tell us what you think</label>
-      <textarea id="feedback-message" rows="5" maxlength="4000" placeholder="What's working well? What would make WorkRoaster better for you?" ${feedbackSubmitting ? 'disabled' : ''}>${esc(feedbackDraft)}</textarea>
-      <small class="field-help">Feedback stays on this device until you send it — nothing is saved or shared automatically.</small>
+      <textarea id="feedback-message" rows="5" maxlength="${FEEDBACK_MAX_LENGTH}" placeholder="What's working well? What would make WorkRoaster better for you?">${esc(feedbackDraft)}</textarea>
+      <small class="field-help" id="feedback-help"><b>Send feedback</b> opens your email app with this message to <a href="mailto:${FEEDBACK_EMAIL}">${FEEDBACK_EMAIL}</a>. Nothing is sent until you press Send there — WorkRoaster itself never sends anything, and your records are never attached.</small>
     </div>
+    <label class="checkbox-field feedback-device" for="feedback-device">
+      <input type="checkbox" id="feedback-device" ${feedbackIncludeDevice ? 'checked' : ''}>
+      <span>Add browser and screen details (helps with layout bugs)</span>
+    </label>
     <div class="feedback-actions">
-      <button class="btn primary" id="btn-feedback-submit" type="button" ${feedbackSubmitting ? 'disabled' : ''}>${feedbackSubmitting ? 'Sending…' : 'Send feedback'}</button>
+      <button class="btn primary" id="btn-feedback-submit" type="button">${icon('arrowRight', 'icon-sm')}Send feedback</button>
+      <button class="btn secondary" id="btn-feedback-copy" type="button">Copy message</button>
       ${
         feedbackStatus && feedbackStatus.ok === false
           ? `<p class="feedback-status is-error" role="status">${icon('close', 'icon-sm')}${esc(feedbackStatus.error)}</p>`
@@ -2305,7 +2336,7 @@ function feedbackTab() {
       }
       ${
         feedbackStatus && feedbackStatus.ok === true
-          ? `<p class="feedback-status is-success" role="status">${icon('check', 'icon-sm')}Thanks — your feedback was sent.</p>`
+          ? `<p class="feedback-status is-success" role="status">${icon('check', 'icon-sm')}Your email app should now be open with the message ready — press Send there. No email app? Use <b>Copy message</b> and email it to ${FEEDBACK_EMAIL}.</p>`
           : ''
       }
     </div>`;
@@ -2332,7 +2363,7 @@ function ruleEditorRow(name, id, rule) {
       </div>
       <div class="field">
         <label for="${id}-value">Value</label>
-        <input id="${id}-value" type="number" step="0.01" min="0" value="${r.type === 'none' ? '' : r.value}" ${r.type === 'none' ? 'disabled' : ''}>
+        <input id="${id}-value" type="number" step="0.01" min="0" inputmode="decimal" value="${r.type === 'none' ? '' : r.value}" ${r.type === 'none' ? 'disabled' : ''}>
       </div>
     </div>`;
 }
@@ -2379,7 +2410,7 @@ function jobFixedPayFields(prefix, fixedPay) {
             <label for="${prefix}-amount"><span class="job-mode-copy" data-for-mode="monthlyFixed">Monthly pay</span><span class="job-mode-copy" data-for-mode="yearlyFixed">Yearly pay</span></label>
             <div class="prefix-input">
               <span class="prefix">${currencyPrefix}</span>
-              <input id="${prefix}-amount" type="number" min="0" step="0.01" ${fp.amount ? `value="${fp.amount}"` : ''} placeholder="4840">
+              <input id="${prefix}-amount" type="number" min="0" step="0.01" inputmode="decimal" ${fp.amount ? `value="${fp.amount}"` : ''} placeholder="4840">
             </div>
           </div>
           <div class="field">
@@ -2430,7 +2461,7 @@ function jobRateField(id, value, placeholder) {
             <label for="${id}"><span class="job-mode-copy" data-for-mode="hourlyRate">Standard / base hourly rate</span><span class="job-mode-copy" data-for-mode="payment">Expected hourly rate <span class="optional">optional</span></span></label>
             <div class="prefix-input">
               <span class="prefix">${money(0).replace(/[0-9.,]/g, '').trim() || '$'}</span>
-              <input id="${id}" type="number" min="0" step="0.01" ${value !== null ? `value="${value}"` : ''} ${placeholder ? `placeholder="${placeholder}"` : ''}>
+              <input id="${id}" type="number" min="0" step="0.01" inputmode="decimal" ${value !== null ? `value="${value}"` : ''} ${placeholder ? `placeholder="${placeholder}"` : ''}>
             </div>
             <small class="field-help job-mode-copy" data-for-mode="payment">Only used to compare what you were paid against what this rate would have paid.</small>
           </div>`;
@@ -3078,11 +3109,16 @@ function initCanvasMotion() {
   window.__workRoasterCanvasMotion = true;
   let ticking = false;
   let scrolled = false;
+  // Touch devices skip the background drift: repainting a full-screen
+  // fixed layer on every scroll frame is what makes cheaper phones stutter.
+  const drift = !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   const update = () => {
-    const y = Math.round(window.scrollY * -0.11);
-    const x = Math.round(Math.sin(window.scrollY * 0.0018) * 7);
-    document.documentElement.style.setProperty('--canvas-shift-y', y + 'px');
-    document.documentElement.style.setProperty('--canvas-shift-x', x + 'px');
+    if (drift) {
+      const y = Math.round(window.scrollY * -0.11);
+      const x = Math.round(Math.sin(window.scrollY * 0.0018) * 7);
+      document.documentElement.style.setProperty('--canvas-shift-y', y + 'px');
+      document.documentElement.style.setProperty('--canvas-shift-x', x + 'px');
+    }
     // The top bar reacts to scrolling (tint/shadow only — never its height,
     // so nothing below it jumps). Hysteresis stops flicker at the edge.
     const next = scrolled ? window.scrollY > 4 : window.scrollY > 16;
@@ -3722,6 +3758,7 @@ function openDatePicker() {
   document.getElementById('date-picker-popover')?.classList.add('is-open');
   document.getElementById('btn-date-picker')?.setAttribute('aria-expanded', 'true');
   datePickerOpen = true;
+  revealPopover(document.getElementById('date-picker-popover'));
 }
 
 function closeDatePicker() {
@@ -3802,6 +3839,7 @@ function openJobPicker() {
   document.getElementById('job-picker-popover')?.classList.add('is-open');
   document.getElementById('btn-job-picker')?.setAttribute('aria-expanded', 'true');
   jobPickerOpen = true;
+  revealPopover(document.getElementById('job-picker-popover'));
 }
 
 function closeJobPicker() {
@@ -3960,6 +3998,37 @@ function openTimePicker(targetId) {
   document.getElementById(timePickerPopoverId())?.classList.add('is-open');
   document.getElementById(timePickerTriggerId())?.setAttribute('aria-expanded', 'true');
   timePickerOpen = true;
+  revealPopover(document.getElementById(timePickerPopoverId()));
+}
+
+/**
+ * Phones: a picker that opens below the fold (or behind the top bar) is
+ * scrolled into view, so the whole popover can be reached without a scroll
+ * hunt. Measures after layout, uses the visual viewport (the on-screen
+ * keyboard shrinks it), and only scrolls when something is actually hidden.
+ * Pickers inside a dialog scroll that dialog's own pane instead of the page.
+ */
+function revealPopover(popover) {
+  if (!popover) return;
+  requestAnimationFrame(() => {
+    if (!popover.classList.contains('is-open')) return;
+    const r = popover.getBoundingClientRect();
+    const vv = window.visualViewport;
+    const viewTop = vv ? vv.offsetTop : 0;
+    const viewBottom = viewTop + (vv ? vv.height : window.innerHeight);
+    const bar = document.querySelector('.command-bar');
+    const scroller = popover.closest('.settings-content, .modal');
+    const top = scroller ? scroller.getBoundingClientRect().top : Math.max(viewTop, bar ? bar.getBoundingClientRect().bottom : 0);
+    const bottom = scroller ? Math.min(scroller.getBoundingClientRect().bottom, viewBottom) : viewBottom;
+    const margin = 12;
+    let delta = 0;
+    if (r.bottom > bottom - margin) delta = r.bottom - bottom + margin;
+    if (r.top - delta < top + margin) delta = r.top - top - margin; // never push the top out of view
+    if (Math.abs(delta) < 2) return;
+    const behavior = motionReduced() ? 'auto' : 'smooth';
+    if (scroller) scroller.scrollBy({ top: delta, behavior });
+    else window.scrollBy({ top: delta, behavior });
+  });
 }
 
 function closeTimePicker({ returnFocus = false } = {}) {
@@ -4900,27 +4969,51 @@ async function handleCycleExport(format, cycleKey, visibility = state.settings.e
   }
 }
 
-/** Submits the Feedback tab's textarea via feedback.js#submitFeedback().
- *  Guards against duplicate submission (ignored while already sending),
- *  and never claims success feedback.js didn't actually report — see
- *  that module's comment for why it currently always resolves ok:false. */
-async function handleFeedbackSubmit() {
-  if (feedbackSubmitting) return;
-  feedbackSubmitting = true;
-  feedbackStatus = null;
-  render();
+/** Opens the person's email app with their feedback (feedback.js builds the
+ *  mailto: link). The draft is kept — WorkRoaster can't know whether the
+ *  email was actually sent, so it never claims it was. */
+function feedbackDevice() {
+  if (!feedbackIncludeDevice) return '';
+  const visual = state.settings.visualTheme || 'classic';
+  return feedbackDeviceSummary({
+    userAgent: navigator.userAgent,
+    screen: `${window.innerWidth}×${window.innerHeight} @${window.devicePixelRatio || 1}x`,
+    theme: `${visual} / ${state.settings.theme}`,
+    standalone: window.matchMedia?.('(display-mode: standalone)').matches,
+  });
+}
 
-  const result = await submitFeedback(feedbackDraft);
-
-  feedbackSubmitting = false;
-  feedbackStatus = result;
+function handleFeedbackSubmit() {
+  const result = buildFeedbackEmail(feedbackDraft, { device: feedbackDevice() });
+  feedbackStatus = result.ok ? { ok: true } : result;
   if (result.ok) {
-    feedbackDraft = '';
-    showToast('Feedback sent — thank you.');
-  } else {
-    showToast(result.notConnected ? 'Feedback isn’t wired up to a backend yet.' : result.error, 'error');
+    // A mailto: navigation hands off to the mail app; the page stays put.
+    // (Not a form submission — CSP form-action 'none' still applies.)
+    window.location.href = result.url;
   }
   render();
+}
+
+async function copyFeedback() {
+  const draft = feedbackDraft.trim();
+  if (!draft) {
+    feedbackStatus = { ok: false, error: 'Please write a message before copying it.' };
+    return render();
+  }
+  const device = feedbackDevice();
+  const text = `To: ${FEEDBACK_EMAIL}\nSubject: WorkRoaster feedback\n\n${draft}${device ? `\n\n${device}` : ''}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(`Copied — paste it into an email to ${FEEDBACK_EMAIL}.`);
+  } catch {
+    // No clipboard permission (older browsers, some in-app webviews): select
+    // the text so a long-press / Ctrl+C copies it.
+    feedbackStatus = { ok: false, error: `Copying isn't allowed here, so the message is selected — copy it and email it to ${FEEDBACK_EMAIL}.` };
+    render();
+    const area = document.getElementById('feedback-message');
+    area?.focus();
+    area?.select();
+  }
 }
 
 function requestCycleExport(format, cycleKey) {
@@ -5224,6 +5317,8 @@ function wireSettingsContentEvents() {
     }
   });
   document.getElementById('btn-feedback-submit')?.addEventListener('click', () => handleFeedbackSubmit());
+  document.getElementById('btn-feedback-copy')?.addEventListener('click', () => copyFeedback());
+  document.getElementById('feedback-device')?.addEventListener('change', (e) => { feedbackIncludeDevice = e.target.checked; });
   document.getElementById('add-option-form')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const input = document.getElementById('new-option-label');
@@ -5659,3 +5754,22 @@ document.addEventListener('focusout', () => {
 initPickerGlobalListeners();
 window.addEventListener('hashchange', onHashChange);
 render();
+dismissBootScreen();
+
+/** Fade out the loading screen (#boot in index.html) once the app has
+ *  rendered. It stays up for at least one beat of its animation so a fast
+ *  load doesn't flash it, but never longer than that: the fading layer
+ *  ignores taps, and it is removed from the page when the fade ends. */
+function dismissBootScreen() {
+  const boot = document.getElementById('boot');
+  if (!boot) return;
+  const MIN_VISIBLE_MS = 750; // from navigation start, not from now
+  const wait = motionReduced() ? 0 : Math.max(0, MIN_VISIBLE_MS - performance.now());
+  setTimeout(() => {
+    boot.classList.add('is-leaving');
+    boot.setAttribute('aria-hidden', 'true');
+    const remove = () => boot.remove();
+    boot.addEventListener('transitionend', (e) => { if (e.target === boot) remove(); });
+    setTimeout(remove, 900); // in case transitionend never fires
+  }, wait);
+}

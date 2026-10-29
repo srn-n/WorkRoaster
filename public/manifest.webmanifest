@@ -1,0 +1,17 @@
+{
+  "name": "WorkRoaster",
+  "short_name": "WorkRoaster",
+  "description": "Log shifts across your jobs and see what you earned in each pay cycle. Your data stays on your device.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f3eee5",
+  "theme_color": "#f3eee5",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

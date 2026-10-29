@@ -4,6 +4,7 @@
   "description": "A simple personal work-hours and earnings tracker — vanilla JS, no build-heavy framework, your data stays in your browser.",
   "type": "module",
   "private": true,
+  "author": "Simply Made Studio",
   "license": "MIT",
   "scripts": {
     "dev": "vite",

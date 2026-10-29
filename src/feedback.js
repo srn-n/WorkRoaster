@@ -1,54 +1,51 @@
 /**
  * feedback.js
  * -----------------------------------------------------------------------
- * The frontend side of the Settings → Feedback form. Deliberately kept
- * separate from app.js and from every other module so the eventual swap
- * to real email delivery is a single, obvious, isolated change: submitFeedback()
- * below is the ONLY function that will need to change once a backend
- * exists — nothing else in this app needs to know or care how (or
- * whether) delivery actually happens.
+ * Settings → Feedback. WorkRoaster has no backend (it is a static,
+ * localStorage-only site), so feedback is sent the plain, honest way: the
+ * person's OWN email app opens with a message to FEEDBACK_EMAIL already
+ * written. Nothing leaves the device until they press Send in that app,
+ * and WorkRoaster itself never transmits anything.
  *
- * WorkRoaster has no backend today (see README.md / docs/data-model.md —
- * it's a static, localStorage-only site). Wiring real delivery requires:
- *
- *   WorkRoaster frontend
- *     -> a Vercel serverless function (e.g. POST /api/feedback)
- *       -> an email-sending provider (not chosen yet)
- *         -> the destination inbox
- *
- * The destination address is intentionally absent from this entire
- * codebase — it must never ship to the browser (no `mailto:`, no
- * client-readable env var, nothing in this file or anywhere else client-
- * side). Choosing a provider and adding the serverless function is a
- * separate piece of work with its own decision to make first.
+ * The address is public on purpose (the owner chose a mailto link over a
+ * server). Device details are only added when the person ticks the box.
  * -----------------------------------------------------------------------
  */
 
-const MAX_LENGTH = 4000;
+export const FEEDBACK_EMAIL = 'samiiiur@yahoo.com';
+export const FEEDBACK_SUBJECT = 'WorkRoaster feedback';
+// mailto: links travel as a URL; email apps (and Windows' URL handler)
+// reliably accept about 2,000 characters, so the message is kept well
+// inside that once it has been URL-encoded.
+export const FEEDBACK_MAX_LENGTH = 1500;
+const MAX_URL_LENGTH = 1900;
+
+/** A short, non-identifying description of the device — only used when the
+ *  person chooses to include it (helps reproduce layout bugs on phones). */
+export function feedbackDeviceSummary(env = {}) {
+  const parts = [];
+  if (env.userAgent) parts.push(`Browser: ${String(env.userAgent).slice(0, 180)}`);
+  if (env.screen) parts.push(`Screen: ${env.screen}`);
+  if (env.theme) parts.push(`Theme: ${env.theme}`);
+  if (env.standalone) parts.push('Opened from the home screen');
+  return parts.join('\n');
+}
 
 /**
- * Validates and "submits" feedback text. Always resolves — never throws —
- * with { ok: true } or { ok: false, error, notConnected? }.
- *
- * Today this always resolves ok:false with notConnected:true: there is no
- * endpoint to send to yet, so nothing here pretends a message was
- * delivered. That is the honest, correct behaviour until a real backend
- * exists — see the module comment above. When that endpoint exists, only
- * the body of this function changes (e.g. to a `fetch('/api/feedback', …)`
- * call); the caller in app.js does not need to change at all.
+ * Build the email for the person's mail app. Always resolves to an object —
+ * never throws: { ok: true, url, body } or { ok: false, error }.
  */
-export async function submitFeedback(message) {
+export function buildFeedbackEmail(message, { device = '' } = {}) {
   const trimmed = String(message || '').trim();
-  if (!trimmed) {
-    return { ok: false, error: 'Please write a message before sending.' };
+  if (!trimmed) return { ok: false, error: 'Please write a message before sending.' };
+  if (trimmed.length > FEEDBACK_MAX_LENGTH) {
+    return { ok: false, error: `That's a little long — please keep feedback under ${FEEDBACK_MAX_LENGTH.toLocaleString()} characters, or copy it into an email yourself.` };
   }
-  if (trimmed.length > MAX_LENGTH) {
-    return { ok: false, error: `That's a little long — please keep feedback under ${MAX_LENGTH.toLocaleString()} characters.` };
+  const footer = ['—', 'Sent from WorkRoaster (work-roaster.vercel.app)', device ? `\n${device}` : ''].filter(Boolean).join('\n');
+  const body = `${trimmed}\n\n${footer}`;
+  const url = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(FEEDBACK_SUBJECT)}&body=${encodeURIComponent(body)}`;
+  if (url.length > MAX_URL_LENGTH) {
+    return { ok: false, error: 'That message is too long for an email link — please shorten it, or copy it into an email yourself.' };
   }
-
-  return {
-    ok: false,
-    notConnected: true,
-    error: "Feedback delivery isn't connected yet, so this message wasn't sent anywhere — the interface is ready, the sending backend isn't built yet.",
-  };
+  return { ok: true, url, body };
 }

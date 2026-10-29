@@ -111,7 +111,7 @@ restore in the "Backup & export" panel to move data between them.
 
 ## Privacy & terms
 
-WorkRoaster has no accounts, ads, analytics or tracking, and nothing you enter is sent anywhere. The feedback form in Settings is not connected yet, so nothing typed there is sent either.
+WorkRoaster has no accounts, ads, analytics or tracking, and nothing you enter is sent anywhere. Settings → Feedback opens your own email app with your message ready to send; nothing leaves your device until you press Send there.
 
 - Privacy Policy: https://www.simplymadestudio.net/privacy#workroaster
 - Terms of Use: https://www.simplymadestudio.net/terms#workroaster

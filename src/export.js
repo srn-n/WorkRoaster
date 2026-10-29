@@ -19,10 +19,11 @@ import ExcelJS from 'exceljs';
 import * as calc from './calculations.js';
 
 const APP_TITLE = 'WorkRoaster';
-// The author's LinkedIn profile (never a repository link — the repo is
-// private, and an export must never point at a dead or exposed link).
-const PROFILE_URL = 'https://www.linkedin.com/in/samiur-rahman23/';
-const PROFILE_LABEL = 'linkedin.com/in/samiur-rahman23';
+// WorkRoaster is made by Simply Made Studio. Exports credit the studio —
+// never a person, and never a repository link (an export must not point
+// at a private or dead link).
+const PROFILE_URL = 'https://www.simplymadestudio.net/';
+const PROFILE_LABEL = 'Simply Made Studio';
 const WATERMARK_PLAIN = `WorkRoaster · ${PROFILE_LABEL}`;
 
 const BASE_COLUMNS = [

@@ -2,10 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- viewport-fit=cover lets the page use the whole screen on phones with a
+       notch / home bar; styles.css keeps content clear of them with
+       env(safe-area-inset-*). Zoom is never disabled (accessibility). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#f3eee5" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#171614" media="(prefers-color-scheme: dark)" />
+  <!-- Add to Home Screen (Android / iOS): app name, icons and standalone
+       window. The browser-bar colour above is updated by app.js to match the
+       chosen theme. -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-title" content="WorkRoaster" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="format-detection" content="telephone=no" />
+  <meta name="author" content="Simply Made Studio" />
   <meta name="description" content="WorkRoaster — a personal work-hours, pay-cycle and earnings tracker." />
   <!-- Link previews (Open Graph / Twitter). Absolute URLs are required by
        the crawlers; the image is public/og-image.png (1200×630). -->
@@ -35,9 +49,60 @@
        the --font-sans stack in styles.css) rather than a network font
        that could fail to load or add a dependency. -->
   <link rel="stylesheet" href="/src/styles.css" />
+  <!-- Applies the saved light/dark, colour theme and motion setting before
+       the first paint, so the loading screen already matches (public/boot.js). -->
+  <script src="/boot.js"></script>
   <title>WorkRoaster</title>
 </head>
 <body>
+  <!-- Loading screen (styles.css → "Loading screen"). Static markup so it
+       paints before any script runs; app.js fades it out after the first
+       render. One loop tells the app's story: the clock hand tracks time,
+       the ring fills a 14-day pay cycle day by day, and the hub turns into
+       a coin — "Time tracked. Cycle mapped. Pay earned." -->
+  <div id="boot" class="boot" role="status" aria-live="polite">
+    <span class="boot-sr">Loading WorkRoaster…</span>
+    <div class="boot-stage" aria-hidden="true">
+      <svg class="boot-mark" viewBox="0 0 120 120" fill="none">
+        <circle class="boot-track" cx="60" cy="60" r="48"></circle>
+        <circle class="boot-ring" cx="60" cy="60" r="48" pathLength="100"></circle>
+        <g class="boot-days">
+          <circle class="boot-day" style="--i:0" cx="60.00" cy="23.00" r="2.3"></circle>
+          <circle class="boot-day" style="--i:1" cx="76.05" cy="26.66" r="2.3"></circle>
+          <circle class="boot-day" style="--i:2" cx="88.93" cy="36.93" r="2.3"></circle>
+          <circle class="boot-day" style="--i:3" cx="96.07" cy="51.77" r="2.3"></circle>
+          <circle class="boot-day" style="--i:4" cx="96.07" cy="68.23" r="2.3"></circle>
+          <circle class="boot-day" style="--i:5" cx="88.93" cy="83.07" r="2.3"></circle>
+          <circle class="boot-day" style="--i:6" cx="76.05" cy="93.34" r="2.3"></circle>
+          <circle class="boot-day" style="--i:7" cx="60.00" cy="97.00" r="2.3"></circle>
+          <circle class="boot-day" style="--i:8" cx="43.95" cy="93.34" r="2.3"></circle>
+          <circle class="boot-day" style="--i:9" cx="31.07" cy="83.07" r="2.3"></circle>
+          <circle class="boot-day" style="--i:10" cx="23.93" cy="68.23" r="2.3"></circle>
+          <circle class="boot-day" style="--i:11" cx="23.93" cy="51.77" r="2.3"></circle>
+          <circle class="boot-day" style="--i:12" cx="31.07" cy="36.93" r="2.3"></circle>
+          <circle class="boot-day" style="--i:13" cx="43.95" cy="26.66" r="2.3"></circle>
+        </g>
+        <circle class="boot-ripple" cx="60" cy="60" r="12"></circle>
+        <g class="boot-hand boot-hand-hour"><path d="M60 60H77"></path></g>
+        <g class="boot-hand boot-hand-minute"><path d="M60 60V25"></path></g>
+        <g class="boot-coin">
+          <circle cx="60" cy="60" r="5"></circle>
+          <circle class="boot-coin-edge" cx="60" cy="60" r="3"></circle>
+        </g>
+      </svg>
+      <p class="boot-words">
+        <span>Time tracked.</span>
+        <span>Cycle mapped.</span>
+        <span>Pay earned.</span>
+      </p>
+    </div>
+    <p class="boot-brand" aria-hidden="true"><b>WorkRoaster</b><small>by Simply Made Studio</small></p>
+    <p class="boot-slow">Still loading… <a href="/">Reload</a></p>
+  </div>
+  <noscript>
+    <style>.boot { display: none; }</style>
+    <p style="padding: 24px; font-family: system-ui, sans-serif;">WorkRoaster needs JavaScript turned on to run.</p>
+  </noscript>
   <div id="app"></div>
   <script type="module" src="/src/app.js"></script>
 </body>

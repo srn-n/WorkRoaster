@@ -2701,3 +2701,429 @@ body::before {
   .command-actions .btn, .command-actions .icon-btn { width: 32px; min-width: 32px; height: 32px; }
   .brand { gap: 8px; }
 }
+
+/* ================================================================== */
+/* Phones and touch screens                                            */
+/* (pointer: coarse) = a finger, not a mouse: controls grow to touch   */
+/* size there only, so the desktop layout is unchanged. Sizes follow   */
+/* Apple / Android guidance (44px) where the layout allows, 40px in    */
+/* dense rows; nothing is below WCAG 2.5.8's 24px.                     */
+/* ================================================================== */
+html { -webkit-tap-highlight-color: transparent; }
+button, a, input, select, textarea, label, [role="button"], [role="option"], [role="tab"] { touch-action: manipulation; }
+
+@media (pointer: coarse) {
+  .btn { min-height: 44px; }
+  .btn.small { min-height: 40px; height: 40px; }
+  .icon-btn { min-width: 44px; min-height: 44px; }
+  .icon-btn.small { min-width: 40px; min-height: 40px; }
+  .cycle-nav-btn { width: 40px; height: 40px; }
+  .command-actions .btn, .command-actions .icon-btn { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
+
+  /* Fields: 44px tall, and 16px text — iPhone Safari zooms the whole page
+     into any field whose text is smaller than that. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]), select, textarea { font-size: 16px; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]), select, .job-select-trigger { min-height: 44px; }
+  input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
+  .time-picker-trigger, #btn-date-picker { min-width: 44px; min-height: 44px; }
+
+  /* Pickers: rows and days big enough to hit first time. */
+  .job-picker-option, .option-picker .job-picker-option { min-height: 44px; }
+  .time-picker-option { min-height: 40px; }
+  /* Taller day cells, but not square: seven 40px squares don't fit a 320px
+     phone. */
+  .date-picker-day { min-height: 40px; aspect-ratio: auto; }
+  .date-picker-nav-btn { width: 40px; height: 40px; }
+  .date-picker-foot button, .time-picker-foot button { min-height: 40px; padding-left: 12px; padding-right: 12px; }
+  .checkbox-field input[type="checkbox"] { width: 20px; height: 20px; }
+  .chip-tab { min-height: 40px; }
+  .rate-breakdown-toggle { min-height: 36px; padding-top: 8px; padding-bottom: 8px; }
+  .rail-tab { min-height: 44px; }
+
+  /* Quick notes: the tick box keeps its look; its hit area is 44px. */
+  .note-check { padding: 12px; margin: -12px -6px -12px -12px; }
+  .note-check-box { width: 24px; height: 24px; }
+  .notes-back { min-height: 44px; }
+}
+
+/* Touch screens have no real hover: a tapped control must not stay
+   "lifted" or tilted after the finger leaves. Press feedback stays. */
+@media (hover: none) {
+  .btn:hover:not(:disabled), .icon-btn:hover:not(:disabled), .rate-choice:hover, .visual-theme-card:hover,
+  .segmented-option:hover, .mode-option:hover, .calendar-day:hover { transform: none; }
+  .command-actions .icon-btn:hover .icon, .command-actions .btn:hover .icon, .brand:hover .brand-mark { transform: none; }
+  .cycle-bar:hover .cycle-bar-fill { transform: none; opacity: 1; }
+  .note-actions { opacity: 1; }
+}
+
+@media (max-width: 560px) {
+  /* Readable small print on a phone (labels were 10.5px, graph day
+     numbers 8.5px). */
+  :root { --text-label: 600 11.5px/1.25 var(--font-sans); }
+  .cycle-bar-label { font-size: 10px; }
+  .cycle-eyebrow, .cycle-linked-note, .ledger-job-group-stats { font-size: 11.5px; }
+  .date-picker-weekday, .date-picker-weekdays span { font-size: 11px; }
+  .nav-notes .nav-badge { font-size: 10.5px; min-width: 18px; height: 18px; }
+
+  /* Notch / rounded corners / home bar (viewport-fit=cover in index.html). */
+  .app-shell {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+  .command-bar { top: calc(8px + env(safe-area-inset-top)); margin-top: calc(8px + env(safe-area-inset-top)); }
+  .toast { bottom: calc(16px + env(safe-area-inset-bottom)); max-width: calc(100vw - 32px); }
+
+  /* Dialogs become bottom sheets: full width, as tall as needed, with the
+     home bar kept clear, and only the sheet scrolls — never the page. */
+  .modal-backdrop { align-items: flex-end; padding: env(safe-area-inset-top) 0 0; }
+  .modal {
+    max-width: none; width: 100%;
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px - env(safe-area-inset-top));
+    border-radius: 20px 20px 0 0; border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    overscroll-behavior: contain;
+  }
+  .modal.settings-modal, .modal.settings-modal.guide-modal {
+    height: calc(100vh - 16px);
+    height: calc(100dvh - 16px - env(safe-area-inset-top));
+  }
+  .modal.is-entering { animation-name: sheet-in; }
+
+  /* Glass-lite: every blurred layer is re-rendered on each scroll frame,
+     which drains battery and stutters on cheaper phones. Content panels go
+     near-solid (same colours); the top bar and dialogs keep the glass. */
+}
+@media (max-width: 560px), (pointer: coarse) and (max-height: 600px) {
+  .panel, .period-card, .date-picker-popover, .job-picker-popover, .time-picker-popover {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  .panel, .period-card { background: color-mix(in srgb, var(--surface-1) 96%, var(--bg)); }
+  .modal-backdrop { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; background: color-mix(in srgb, var(--surface-0) 72%, transparent); }
+}
+@keyframes sheet-in { from { transform: translateY(24px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+
+/* While a dialog is open the page behind it stays still (iOS otherwise
+   scrolls the page when a sheet's content reaches its end). */
+html:has(.modal-backdrop), html:has(.modal-backdrop) body { overflow: hidden; }
+
+/* Brand name: five touch-size header buttons and the name don't fit
+   below ~400px, so the clock mark stays and the name is kept for screen
+   readers only. */
+@media (max-width: 400px) and (pointer: coarse) {
+  .command-bar { gap: 6px; padding: 8px 8px 8px 10px; }
+  .command-actions { gap: 4px; }
+  .brand-name { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+}
+
+/* Phone held sideways: the floating bar sits tighter so more of the
+   page fits in the short screen. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .command-bar { top: 4px; margin-top: 4px; padding-top: 6px; padding-bottom: 6px; }
+  .app-shell { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+}
+
+
+/* =========================================================================
+   Loading screen (#boot in index.html)
+   -------------------------------------------------------------------------
+   Painted from static markup before any script runs, in the saved theme
+   (public/boot.js sets data-theme / data-visual / data-motion first). One
+   3.6s loop tells the WorkRoaster story: the minute hand sweeps (time
+   tracked), the ring and its 14 day dots fill one pay cycle (cycle mapped),
+   and the hub pops into a coin with a ripple (pay earned). app.js fades it
+   out after the first render. Only transform / opacity / stroke are
+   animated; reduced motion and the "Minimal" motion style get a still mark.
+   ========================================================================= */
+.boot {
+  --boot-loop: 3.6s;
+  --boot-day-off: color-mix(in srgb, var(--text-muted) 34%, transparent);
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(60vmax 60vmax at 18% 12%, var(--canvas-glow-1), transparent 62%),
+    radial-gradient(55vmax 55vmax at 86% 92%, var(--canvas-glow-2), transparent 60%),
+    var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  transition: opacity 460ms var(--ease-spatial, ease), visibility 0s linear 460ms;
+}
+.boot-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.boot-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  animation: boot-stage-in 620ms var(--ease-spring-soft, ease-out) both;
+  transition: transform 460ms var(--ease-spatial, ease), opacity 360ms ease;
+}
+.boot-mark {
+  width: clamp(124px, 34vmin, 168px);
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 18px 30px color-mix(in srgb, var(--accent) 22%, transparent));
+}
+.boot-mark * { transform-box: view-box; transform-origin: 60px 60px; }
+.boot-track { stroke: color-mix(in srgb, var(--text-muted) 22%, transparent); stroke-width: 3; }
+.boot-ring {
+  stroke: var(--accent);
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-dasharray: 100 100;
+  stroke-dashoffset: 100;
+  transform: rotate(-90deg);
+  animation: boot-ring var(--boot-loop) cubic-bezier(0.45, 0, 0.3, 1) infinite;
+}
+.boot-day {
+  fill: var(--boot-day-off);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: var(--boot-loop) linear infinite;
+}
+.boot-hand path { stroke: var(--text-primary); stroke-linecap: round; }
+.boot-hand-minute path { stroke-width: 3.6; }
+.boot-hand-hour path { stroke-width: 4.2; opacity: 0.55; }
+.boot-hand-minute { animation: boot-minute var(--boot-loop) cubic-bezier(0.45, 0, 0.3, 1) infinite; }
+.boot-hand-hour { animation: boot-hour calc(var(--boot-loop) * 12) linear infinite; }
+.boot-coin circle:first-child { fill: var(--accent); }
+.boot-coin-edge { fill: none; stroke: var(--on-accent); stroke-width: 0.9; opacity: 0; animation: boot-coin-edge var(--boot-loop) ease infinite; }
+.boot-coin { animation: boot-coin var(--boot-loop) var(--ease-spring, ease-out) infinite; }
+.boot-ripple { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: 0; animation: boot-ripple var(--boot-loop) ease-out infinite; }
+
+.boot-words {
+  position: relative;
+  display: grid;
+  margin: 0;
+  min-width: 14ch;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-secondary);
+}
+.boot-words span {
+  grid-area: 1 / 1;
+  opacity: 0;
+  animation: var(--boot-loop) var(--ease-spatial, ease) infinite;
+}
+.boot-words span:nth-child(1) { animation-name: boot-word-1; }
+.boot-words span:nth-child(2) { animation-name: boot-word-2; }
+.boot-words span:nth-child(3) { animation-name: boot-word-3; color: var(--accent-text); }
+.boot-brand {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: max(28px, calc(env(safe-area-inset-bottom) + 16px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  animation: boot-fade-in 700ms 180ms ease both;
+}
+.boot-brand b { font-size: 0.95rem; letter-spacing: -0.01em; }
+.boot-brand small { font-size: 0.75rem; color: var(--text-muted); letter-spacing: 0.04em; }
+.boot-slow {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  opacity: 0;
+  visibility: hidden;
+  animation: boot-slow 400ms 8s ease forwards;
+}
+.boot-slow a { color: var(--accent-text); font-weight: 600; }
+
+/* Leaving: the mark "opens" into the app while the screen fades away. The
+   app underneath is already live — the fading layer never blocks a tap. */
+.boot.is-leaving { opacity: 0; visibility: hidden; pointer-events: none; }
+.boot.is-leaving .boot-stage { transform: scale(1.12); opacity: 0; }
+.boot.is-leaving .boot-brand { opacity: 0; transition: opacity 200ms ease; }
+
+@keyframes boot-stage-in {
+  from { opacity: 0; transform: scale(0.86); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes boot-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes boot-slow { to { opacity: 1; visibility: visible; } }
+@keyframes boot-ring {
+  0%, 8% { stroke-dashoffset: 100; opacity: 1; }
+  72%, 84% { stroke-dashoffset: 0; opacity: 1; }
+  97% { stroke-dashoffset: 0; opacity: 0; }
+  100% { stroke-dashoffset: 100; opacity: 0; }
+}
+@keyframes boot-minute {
+  0%, 8% { transform: rotate(0deg); }
+  72%, 100% { transform: rotate(360deg); }
+}
+@keyframes boot-hour { to { transform: rotate(360deg); } }
+@keyframes boot-coin {
+  0%, 70% { transform: scale(1); }
+  77% { transform: scale(2.3); }
+  84%, 92% { transform: scale(2); }
+  100% { transform: scale(1); }
+}
+@keyframes boot-coin-edge {
+  0%, 72% { opacity: 0; }
+  78%, 90% { opacity: 0.9; }
+  98%, 100% { opacity: 0; }
+}
+@keyframes boot-ripple {
+  0%, 72% { opacity: 0; transform: scale(0.5); }
+  75% { opacity: 0.6; transform: scale(0.8); }
+  94%, 100% { opacity: 0; transform: scale(3.6); }
+}
+@keyframes boot-word-1 {
+  0% { opacity: 0; transform: translateY(8px); }
+  5%, 28% { opacity: 1; transform: none; }
+  34%, 100% { opacity: 0; transform: translateY(-8px); }
+}
+@keyframes boot-word-2 {
+  0%, 33% { opacity: 0; transform: translateY(8px); }
+  39%, 64% { opacity: 1; transform: none; }
+  70%, 100% { opacity: 0; transform: translateY(-8px); }
+}
+@keyframes boot-word-3 {
+  0%, 70% { opacity: 0; transform: translateY(8px); }
+  76%, 93% { opacity: 1; transform: none; }
+  99%, 100% { opacity: 0; transform: translateY(-8px); }
+}
+@keyframes boot-day-0 {
+  0%, 10.3% { fill: var(--boot-day-off); transform: scale(1); }
+  12.3% { fill: var(--accent); transform: scale(1.6); }
+  16.3%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(1) { animation-name: boot-day-0; }
+@keyframes boot-day-1 {
+  0%, 14.9% { fill: var(--boot-day-off); transform: scale(1); }
+  16.9% { fill: var(--accent); transform: scale(1.6); }
+  20.9%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(2) { animation-name: boot-day-1; }
+@keyframes boot-day-2 {
+  0%, 19.4% { fill: var(--boot-day-off); transform: scale(1); }
+  21.4% { fill: var(--accent); transform: scale(1.6); }
+  25.4%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(3) { animation-name: boot-day-2; }
+@keyframes boot-day-3 {
+  0%, 24.0% { fill: var(--boot-day-off); transform: scale(1); }
+  26.0% { fill: var(--accent); transform: scale(1.6); }
+  30.0%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(4) { animation-name: boot-day-3; }
+@keyframes boot-day-4 {
+  0%, 28.6% { fill: var(--boot-day-off); transform: scale(1); }
+  30.6% { fill: var(--accent); transform: scale(1.6); }
+  34.6%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(5) { animation-name: boot-day-4; }
+@keyframes boot-day-5 {
+  0%, 33.1% { fill: var(--boot-day-off); transform: scale(1); }
+  35.1% { fill: var(--accent); transform: scale(1.6); }
+  39.1%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(6) { animation-name: boot-day-5; }
+@keyframes boot-day-6 {
+  0%, 37.7% { fill: var(--boot-day-off); transform: scale(1); }
+  39.7% { fill: var(--accent); transform: scale(1.6); }
+  43.7%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(7) { animation-name: boot-day-6; }
+@keyframes boot-day-7 {
+  0%, 42.3% { fill: var(--boot-day-off); transform: scale(1); }
+  44.3% { fill: var(--accent); transform: scale(1.6); }
+  48.3%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(8) { animation-name: boot-day-7; }
+@keyframes boot-day-8 {
+  0%, 46.9% { fill: var(--boot-day-off); transform: scale(1); }
+  48.9% { fill: var(--accent); transform: scale(1.6); }
+  52.9%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(9) { animation-name: boot-day-8; }
+@keyframes boot-day-9 {
+  0%, 51.4% { fill: var(--boot-day-off); transform: scale(1); }
+  53.4% { fill: var(--accent); transform: scale(1.6); }
+  57.4%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(10) { animation-name: boot-day-9; }
+@keyframes boot-day-10 {
+  0%, 56.0% { fill: var(--boot-day-off); transform: scale(1); }
+  58.0% { fill: var(--accent); transform: scale(1.6); }
+  62.0%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(11) { animation-name: boot-day-10; }
+@keyframes boot-day-11 {
+  0%, 60.6% { fill: var(--boot-day-off); transform: scale(1); }
+  62.6% { fill: var(--accent); transform: scale(1.6); }
+  66.6%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(12) { animation-name: boot-day-11; }
+@keyframes boot-day-12 {
+  0%, 65.1% { fill: var(--boot-day-off); transform: scale(1); }
+  67.1% { fill: var(--accent); transform: scale(1.6); }
+  71.1%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(13) { animation-name: boot-day-12; }
+@keyframes boot-day-13 {
+  0%, 69.7% { fill: var(--boot-day-off); transform: scale(1); }
+  71.7% { fill: var(--accent); transform: scale(1.6); }
+  75.7%, 84% { fill: var(--accent); transform: scale(1); }
+  96%, 100% { fill: var(--boot-day-off); transform: scale(1); }
+}
+.boot-day:nth-child(14) { animation-name: boot-day-13; }
+
+/* Smooth motion: the same loop without the coin's overshoot. */
+:root[data-motion="smooth"] .boot-coin { animation-timing-function: var(--ease-spatial, ease); }
+
+/* Reduced motion / "Minimal": a still, complete mark and the full line. */
+@media (prefers-reduced-motion: reduce) {
+  .boot-stage, .boot-brand, .boot-ring, .boot-day, .boot-hand, .boot-coin, .boot-coin-edge, .boot-ripple, .boot-words span { animation: none !important; }
+  .boot-ring { stroke-dashoffset: 0; }
+  .boot-day { fill: var(--accent); }
+  .boot-hand-minute { transform: rotate(300deg); }
+  .boot-words { display: block; }
+  .boot-words span { opacity: 1; margin: 0 0.2em; display: inline-block; white-space: nowrap; }
+  .boot, .boot-stage { transition-duration: 160ms; }
+  .boot.is-leaving .boot-stage { transform: none; }
+}
+:root[data-motion="minimal"] :is(.boot-stage, .boot-brand, .boot-ring, .boot-day, .boot-hand, .boot-coin, .boot-coin-edge, .boot-ripple, .boot-words span) { animation: none !important; }
+:root[data-motion="minimal"] .boot-ring { stroke-dashoffset: 0; }
+:root[data-motion="minimal"] .boot-day { fill: var(--accent); }
+:root[data-motion="minimal"] .boot-hand-minute { transform: rotate(300deg); }
+:root[data-motion="minimal"] .boot-words { display: block; }
+:root[data-motion="minimal"] .boot-words span { opacity: 1; margin: 0 0.2em; display: inline-block; white-space: nowrap; }
+:root[data-motion="minimal"] :is(.boot, .boot-stage) { transition-duration: 160ms; }
+:root[data-motion="minimal"] .boot.is-leaving .boot-stage { transform: none; }
+@media (max-width: 380px) {
+  .boot-words span { white-space: nowrap; }
+}
