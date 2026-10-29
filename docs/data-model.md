@@ -684,6 +684,16 @@ All-profiles imports match each profile by name (case-insensitive) and
 import into it in the chosen mode. A profile the device doesn't have is
 created and given the file's settings in full (pay cycle, currency…).
 
+## Ids
+
+Record, job and day/payment-type option ids are written into HTML attributes,
+so they are restricted to `[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}`. Ids the app
+creates (UUIDs, slugs, base-36 stamps) always match. An id from storage or an
+imported backup that doesn't match is replaced on load by `src/ids.js#safeId`
+with a stable `id-…` token: the same input always gives the same token, so a
+record's `jobId` still points at its job. Backup files larger than 25 MB are
+refused before they are read.
+
 ## If you change the schema
 
 1. Never rename `RECORDS_KEY` in `storage.js`, and never write a shape

@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -32,10 +34,9 @@ jobs:
 
       - name: Run unit tests
         run: npm test
-        continue-on-error: true
 
       - name: Install Capacitor Android tooling
-        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+        run: npm install --no-save --ignore-scripts @capacitor/core@7.6.10 @capacitor/cli@7.6.10 @capacitor/android@7.6.10
 
       - name: Build web app
         run: npm run build

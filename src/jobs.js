@@ -18,6 +18,7 @@
  * -----------------------------------------------------------------------
  */
 import { normalizeRule, normalizePayMode, normalizeFixedPay, fixedScheduleMinutes, minutesFromTimes, getRateBreakdown, recordMinutes, recordPayMode } from './calculations.js';
+import { safeId } from './ids.js';
 
 const slugBase = (label) =>
   String(label)
@@ -42,7 +43,7 @@ export function makeJobId(name, existingIds = []) {
 export function normalizeJob(job) {
   const src = job && typeof job === 'object' ? job : {};
   return {
-    id: src.id || makeJobId(src.name || 'job'),
+    id: safeId(src.id) || makeJobId(src.name || 'job'),
     name: String(src.name || '').trim(),
     employer: String(src.employer || '').trim(),
     baseRate: Number.isFinite(Number(src.baseRate)) ? Math.max(0, Number(src.baseRate)) : 0,

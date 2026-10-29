@@ -1784,7 +1784,7 @@ function rateBreakdownWidget(r, mins) {
   const line = recordRateBreakdownLine(r, mins);
   if (!line) return '';
   return `
-    <div class="rate-breakdown" data-id="${r.id}">
+    <div class="rate-breakdown" data-id="${esc(r.id)}">
       <button type="button" class="rate-breakdown-toggle" data-rb-toggle>${icon('arrowRight', 'icon-sm')}Rate breakdown</button>
       <div class="rate-breakdown-detail is-hidden">${line}</div>
     </div>`;
@@ -1827,7 +1827,7 @@ function renderLedgerRow(r) {
   const jobName = recordJobName(r);
 
   return `
-    <tr class="${rowClasses}" data-id="${r.id}">
+    <tr class="${rowClasses}" data-id="${esc(r.id)}">
       <td class="ledger-date">
         <span class="ledger-day">${calc.dayName(r.date)}</span>
         <span class="ledger-date-sub">${calc.shortDateLabel(r.date)}</span>
@@ -1844,8 +1844,8 @@ function renderLedgerRow(r) {
       <td class="ledger-pay tnum">${money(r.paymentAmount)}</td>
       <td class="ledger-actions">
         <div class="record-actions">
-          <button class="icon-btn small" data-action="edit" data-id="${r.id}" title="Edit" aria-label="Edit record from ${esc(calc.shortDateLabel(r.date))}">${icon('edit', 'icon-sm')}</button>
-          <button class="icon-btn small danger" data-action="delete" data-id="${r.id}" title="Delete" aria-label="Delete record from ${esc(calc.shortDateLabel(r.date))}">${icon('trash', 'icon-sm')}</button>
+          <button class="icon-btn small" data-action="edit" data-id="${esc(r.id)}" title="Edit" aria-label="Edit record from ${esc(calc.shortDateLabel(r.date))}">${icon('edit', 'icon-sm')}</button>
+          <button class="icon-btn small danger" data-action="delete" data-id="${esc(r.id)}" title="Delete" aria-label="Delete record from ${esc(calc.shortDateLabel(r.date))}">${icon('trash', 'icon-sm')}</button>
         </div>
       </td>
     </tr>
@@ -1866,7 +1866,7 @@ function renderLedgerMobileRow(r) {
 
   return `
     <li>
-      <div class="ledger-mobile-row ${isEditing ? 'is-editing' : ''}" data-id="${r.id}">
+      <div class="ledger-mobile-row ${isEditing ? 'is-editing' : ''}" data-id="${esc(r.id)}">
         <div class="ledger-mobile-top">
           <span class="ledger-mobile-date">${calc.dayName(r.date)} ${calc.shortDateLabel(r.date)}</span>
           <span class="ledger-mobile-pay tnum">${money(r.paymentAmount)}</span>
@@ -1879,8 +1879,8 @@ function renderLedgerMobileRow(r) {
             ${rateLabel !== '—' ? `<span class="ledger-mobile-part"><b>${rateLabel}</b></span>` : ''}
           </span>
           <div class="record-actions">
-            <button class="icon-btn small" data-action="edit" data-id="${r.id}" title="Edit" aria-label="Edit record from ${esc(calc.shortDateLabel(r.date))}">${icon('edit', 'icon-sm')}</button>
-            <button class="icon-btn small danger" data-action="delete" data-id="${r.id}" title="Delete" aria-label="Delete record from ${esc(calc.shortDateLabel(r.date))}">${icon('trash', 'icon-sm')}</button>
+            <button class="icon-btn small" data-action="edit" data-id="${esc(r.id)}" title="Edit" aria-label="Edit record from ${esc(calc.shortDateLabel(r.date))}">${icon('edit', 'icon-sm')}</button>
+            <button class="icon-btn small danger" data-action="delete" data-id="${esc(r.id)}" title="Delete" aria-label="Delete record from ${esc(calc.shortDateLabel(r.date))}">${icon('trash', 'icon-sm')}</button>
           </div>
         </div>
         <div class="record-meta">${recordMetaTags(r)}</div>
@@ -2093,20 +2093,20 @@ function renderInsights() {
 function renderOptionRow(field, option, usageCount) {
   const locked = usageCount > 0;
   return `
-    <li class="option-row ${option.archived ? 'is-archived' : ''}" data-id="${option.id}">
+    <li class="option-row ${option.archived ? 'is-archived' : ''}" data-id="${esc(option.id)}">
       <div class="option-info">
         <span class="option-label" data-role="label">${esc(option.label)}</span>
         ${option.archived ? '<span class="tag muted-tag">Archived</span>' : ''}
         <span class="option-usage">${usageCount ? `used in ${usageCount} record${usageCount === 1 ? '' : 's'}` : 'not used yet'}</span>
       </div>
       <div class="option-actions">
-        <button class="icon-btn small" data-opt-action="move-up" data-field="${field}" data-id="${option.id}" aria-label="Move ${esc(option.label)} up">${icon('arrowUp', 'icon-sm')}</button>
-        <button class="icon-btn small" data-opt-action="move-down" data-field="${field}" data-id="${option.id}" aria-label="Move ${esc(option.label)} down">${icon('arrowDown', 'icon-sm')}</button>
-        <button class="icon-btn small" data-opt-action="rename" data-field="${field}" data-id="${option.id}">Rename</button>
+        <button class="icon-btn small" data-opt-action="move-up" data-field="${field}" data-id="${esc(option.id)}" aria-label="Move ${esc(option.label)} up">${icon('arrowUp', 'icon-sm')}</button>
+        <button class="icon-btn small" data-opt-action="move-down" data-field="${field}" data-id="${esc(option.id)}" aria-label="Move ${esc(option.label)} down">${icon('arrowDown', 'icon-sm')}</button>
+        <button class="icon-btn small" data-opt-action="rename" data-field="${field}" data-id="${esc(option.id)}">Rename</button>
         ${
           option.archived
-            ? `<button class="icon-btn small" data-opt-action="restore" data-field="${field}" data-id="${option.id}">Restore</button>`
-            : `<button class="icon-btn small danger" data-opt-action="remove" data-field="${field}" data-id="${option.id}">${locked ? 'Archive' : 'Delete'}</button>`
+            ? `<button class="icon-btn small" data-opt-action="restore" data-field="${field}" data-id="${esc(option.id)}">Restore</button>`
+            : `<button class="icon-btn small danger" data-opt-action="remove" data-field="${field}" data-id="${esc(option.id)}">${locked ? 'Archive' : 'Delete'}</button>`
         }
       </div>
     </li>`;
@@ -2451,7 +2451,7 @@ function renderJobRow(job, records) {
   const usage = jobs.jobUsageCount(records, job.id);
   const editing = state.jobEditingId === job.id;
   return `
-    <li class="job-row ${job.active ? '' : 'is-archived'}" data-id="${job.id}">
+    <li class="job-row ${job.active ? '' : 'is-archived'}" data-id="${esc(job.id)}">
       <div class="job-row-top">
         <div class="job-row-info">
           <span class="job-row-name">${esc(job.name)}${job.employer ? ` <span class="muted">· ${esc(job.employer)}</span>` : ''}</span>
@@ -2459,13 +2459,13 @@ function renderJobRow(job, records) {
         </div>
         <span class="job-row-rate tnum">${jobCardPaySummary(job)}</span>
         <div class="job-row-actions">
-          <button class="icon-btn small" data-job-action="edit" data-id="${job.id}">${editing ? 'Close' : 'Edit'}</button>
+          <button class="icon-btn small" data-job-action="edit" data-id="${esc(job.id)}">${editing ? 'Close' : 'Edit'}</button>
           ${
             job.active
-              ? `<button class="icon-btn small danger" data-job-action="archive" data-id="${job.id}">Archive</button>`
-              : `<button class="icon-btn small" data-job-action="restore" data-id="${job.id}">Restore</button>`
+              ? `<button class="icon-btn small danger" data-job-action="archive" data-id="${esc(job.id)}">Archive</button>`
+              : `<button class="icon-btn small" data-job-action="restore" data-id="${esc(job.id)}">Restore</button>`
           }
-          ${usage === 0 ? `<button class="icon-btn small danger" data-job-action="delete" data-id="${job.id}" aria-label="Delete ${esc(job.name)}" title="No records use this job, so it can be deleted">Delete</button>` : ''}
+          ${usage === 0 ? `<button class="icon-btn small danger" data-job-action="delete" data-id="${esc(job.id)}" aria-label="Delete ${esc(job.name)}" title="No records use this job, so it can be deleted">Delete</button>` : ''}
         </div>
       </div>
       <div class="job-row-badges">
@@ -2477,34 +2477,34 @@ function renderJobRow(job, records) {
       ${
         editing
           ? `
-      <form class="job-editor" data-job-edit-form data-id="${job.id}" data-pay-mode="${jobPayMode(job)}">
+      <form class="job-editor" data-job-edit-form data-id="${esc(job.id)}" data-pay-mode="${jobPayMode(job)}">
         <fieldset class="field-group">
           <legend>Job details</legend>
           <div class="grid grid-2">
             <div class="field">
-              <label for="je-name-${job.id}">Job name</label>
-              <input id="je-name-${job.id}" required value="${esc(job.name)}">
+              <label for="je-name-${esc(job.id)}">Job name</label>
+              <input id="je-name-${esc(job.id)}" required value="${esc(job.name)}">
             </div>
             <div class="field">
-              <label for="je-employer-${job.id}">Employer <span class="optional">optional</span></label>
-              <input id="je-employer-${job.id}" value="${esc(job.employer)}">
+              <label for="je-employer-${esc(job.id)}">Employer <span class="optional">optional</span></label>
+              <input id="je-employer-${esc(job.id)}" value="${esc(job.employer)}">
             </div>
           </div>
         </fieldset>
-        ${jobPaymentMethodFieldset(`je-mode-${job.id}`, jobPayMode(job), `je-rate-${job.id}`, job.baseRate, '', true, `je-fx-${job.id}`, job.fixedPay)}
+        ${jobPaymentMethodFieldset(`je-mode-${esc(job.id)}`, jobPayMode(job), `je-rate-${esc(job.id)}`, job.baseRate, '', true, `je-fx-${esc(job.id)}`, job.fixedPay)}
         <fieldset class="field-group job-mode-section" data-modes="hourlyRate payment">
           <legend>Weekend &amp; loading rules</legend>
-          ${ruleEditorRow('Saturday', `je-sat-${job.id}`, job.saturdayRule)}
-          ${ruleEditorRow('Sunday', `je-sun-${job.id}`, job.sundayRule)}
-          ${ruleEditorRow('Additional loading', `je-add-${job.id}`, job.additionalRule)}
+          ${ruleEditorRow('Saturday', `je-sat-${esc(job.id)}`, job.saturdayRule)}
+          ${ruleEditorRow('Sunday', `je-sun-${esc(job.id)}`, job.sundayRule)}
+          ${ruleEditorRow('Additional loading', `je-add-${esc(job.id)}`, job.additionalRule)}
           <small class="field-help">Additional loading is also what's offered for overtime and public-holiday shifts when entering a record.</small>
           ${JOB_RATES_MODE_HINT}
         </fieldset>
         <fieldset class="field-group">
           <legend>Other</legend>
           <div class="field">
-            <label for="je-notes-${job.id}">Notes <span class="optional">optional</span></label>
-            <input id="je-notes-${job.id}" value="${esc(job.notes)}">
+            <label for="je-notes-${esc(job.id)}">Notes <span class="optional">optional</span></label>
+            <input id="je-notes-${esc(job.id)}" value="${esc(job.notes)}">
           </div>
         </fieldset>
         <div class="form-actions">
@@ -4639,7 +4639,7 @@ function handleJobEditSubmit(id, event) {
     `je-fx-${id}-amount`, `je-fx-${id}-start`, `je-fx-${id}-end`, `je-fx-${id}-break`,
   ];
   const snapshot = snapshotJobFormFields(fieldIds);
-  const editForm = document.querySelector(`form[data-job-edit-form][data-id="${id}"]`);
+  const editForm = document.querySelector(`form[data-job-edit-form][data-id="${CSS.escape(id)}"]`);
   const payCalculationMode = readJobFormMode(editForm);
   const fixedPay = readFixedPayFromForm(editForm, `je-fx-${id}`);
   const patch = {
@@ -4660,7 +4660,7 @@ function handleJobEditSubmit(id, event) {
     // the problem — the toast above already rebuilt the editor via
     // render(), reset to the job's stored values, so restore the attempt.
     restoreJobFormFields(snapshot, [`je-sat-${id}`, `je-sun-${id}`, `je-add-${id}`]);
-    const restoredForm = document.querySelector(`form[data-job-edit-form][data-id="${id}"]`);
+    const restoredForm = document.querySelector(`form[data-job-edit-form][data-id="${CSS.escape(id)}"]`);
     setJobFormMode(restoredForm, payCalculationMode);
     restoreWorkdays(restoredForm, fixedPay.workingDays);
     document.getElementById(`je-name-${id}`)?.focus();
@@ -5004,12 +5004,19 @@ function importSummaryMessage(mode, sum) {
   return parts.join(' ');
 }
 
+const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
+
 function handleImport(mode) {
   const input = document.getElementById('import-file');
   input.value = '';
   input.onchange = () => {
     const file = input.files[0];
     if (!file) return;
+    // A real backup is a few MB at most; a huge file would only freeze the tab.
+    if (file.size > MAX_IMPORT_BYTES) {
+      showToast(`That file is too large to be a WorkRoaster backup (over ${MAX_IMPORT_BYTES / 1024 / 1024} MB). Nothing was imported.`, 'error');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       // Import is all-or-nothing: if anything below fails, put the records

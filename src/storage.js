@@ -17,6 +17,7 @@
  */
 import { recordMinutes, getCycleForDate, hasEndTime, normalizeRule, normalizeFixedPay, isFixedPayMode, dateRuleKind, normalizeCycleAnchor, DEFAULT_CYCLE_ANCHOR } from './calculations.js';
 import { normalizeJob, findJob, makeJobId } from './jobs.js';
+import { safeId } from './ids.js';
 
 export const RECORDS_KEY = 'modern_work_hours_tracker_v1';
 export const SETTINGS_KEY = 'modern_work_hours_tracker_v1_settings';
@@ -114,7 +115,7 @@ function safeParse(raw, fallback) {
 /** Fill in an id/shape gap on an old record without discarding anything. */
 function migrateRecord(record) {
   const migrated = {
-    id: record.id || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)),
+    id: safeId(record.id) || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)),
     date: record.date || '',
     start: record.start || '',
     cycle: record.cycle || 'Unassigned',
@@ -159,7 +160,7 @@ function migrateRecord(record) {
   // A pre-Jobs record (or a record saved with no job selected) simply
   // never gets any of these keys, and behaves exactly as it always has.
   if (record.jobId) {
-    migrated.jobId = String(record.jobId);
+    migrated.jobId = safeId(record.jobId);
   }
   // Historical rate snapshot: the base rate, the weekend rule, and the
   // additional rule actually used to compute this record's rate/pay at
@@ -382,7 +383,7 @@ function normalizeOptionList(list, fallback) {
   if (!Array.isArray(list)) return fallback;
   const clean = list
     .filter((o) => isObject(o) && typeof o.label === 'string' && o.label.trim())
-    .map((o) => ({ ...o, id: typeof o.id === 'string' && o.id ? o.id : slugify(o.label), archived: o.archived === true }));
+    .map((o) => ({ ...o, id: safeId(o.id) || slugify(o.label), archived: o.archived === true }));
   return clean.length ? clean : fallback;
 }
 
@@ -439,7 +440,7 @@ export function normalizeSettings(stored) {
                 : { ...j, payCalculationMode: ['payment', 'hourlyRate'].includes(stored.payCalculationMode) ? stored.payCalculationMode : base.payCalculationMode }
             )
           )
-          .map((j) => ({ ...j, id: String(j.id) }))
+          .map((j) => ({ ...j, id: safeId(j.id) || makeJobId(j.name || 'job') }))
       : base.jobs,
   };
 }
@@ -689,7 +690,7 @@ export function parseBackup(jsonText) {
       return;
     }
     if (!isBlank(record.id)) {
-      const id = String(record.id);
+      const id = safeId(record.id);
       if (seenIds.has(id)) problems.push(`${label}: it has the same id as record ${seenIds.get(id) + 1}`);
       else seenIds.set(id, index);
     }
@@ -735,7 +736,7 @@ function mergeOptionList(existing, incoming) {
   const ids = new Set(list.map((o) => o.id));
   for (const o of Array.isArray(incoming) ? incoming : []) {
     if (!o || typeof o.label !== 'string' || !o.label.trim() || have.has(nameKey(o.label))) continue;
-    let id = typeof o.id === 'string' && o.id && !ids.has(o.id) ? o.id : slugify(o.label);
+    let id = safeId(o.id) && !ids.has(safeId(o.id)) ? safeId(o.id) : slugify(o.label);
     while (ids.has(id)) id = `${id}-2`;
     list.push({ id, label: o.label.trim(), archived: o.archived === true });
     have.add(nameKey(o.label));
