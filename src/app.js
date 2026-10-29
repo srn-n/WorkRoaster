@@ -5757,14 +5757,28 @@ render();
 dismissBootScreen();
 
 /** Fade out the loading screen (#boot in index.html) once the app has
- *  rendered. It stays up for at least one beat of its animation so a fast
- *  load doesn't flash it, but never longer than that: the fading layer
- *  ignores taps, and it is removed from the page when the fade ends. */
+ *  rendered. The first visit of a browser session (or each launch of the
+ *  Android app) shows it for 5 seconds from navigation start — one full
+ *  loop of its animation ("Time tracked. Cycle mapped. Pay earned.") with
+ *  the Simply Made Studio credit in view. Reloads and later visits in the
+ *  same session keep it brief (1 second; none with reduced motion /
+ *  "Minimal"). A slow load keeps it up until the app is ready. Then it
+ *  fades (the fading layer ignores taps) and is removed. */
 function dismissBootScreen() {
+  const BOOT_INTRO_SEEN_KEY = 'workroaster_intro_seen'; // sessionStorage, per tab
+  const FIRST_VISIT_MS = 5000; // keep equal to --boot-loop in styles.css
+  const REPEAT_VISIT_MS = 1000;
   const boot = document.getElementById('boot');
   if (!boot) return;
-  const MIN_VISIBLE_MS = 750; // from navigation start, not from now
-  const wait = motionReduced() ? 0 : Math.max(0, MIN_VISIBLE_MS - performance.now());
+  let seen = false;
+  try {
+    seen = sessionStorage.getItem(BOOT_INTRO_SEEN_KEY) === '1';
+    sessionStorage.setItem(BOOT_INTRO_SEEN_KEY, '1');
+  } catch (e) {
+    /* Storage blocked: treat as a first visit. */
+  }
+  const minimum = !seen ? FIRST_VISIT_MS : motionReduced() ? 0 : REPEAT_VISIT_MS;
+  const wait = Math.max(0, minimum - performance.now());
   setTimeout(() => {
     boot.classList.add('is-leaving');
     boot.setAttribute('aria-hidden', 'true');

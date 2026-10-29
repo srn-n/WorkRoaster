@@ -2831,14 +2831,14 @@ html:has(.modal-backdrop), html:has(.modal-backdrop) body { overflow: hidden; }
    -------------------------------------------------------------------------
    Painted from static markup before any script runs, in the saved theme
    (public/boot.js sets data-theme / data-visual / data-motion first). One
-   3.6s loop tells the WorkRoaster story: the minute hand sweeps (time
+   5s loop tells the WorkRoaster story: the minute hand sweeps (time
    tracked), the ring and its 14 day dots fill one pay cycle (cycle mapped),
    and the hub pops into a coin with a ripple (pay earned). app.js fades it
    out after the first render. Only transform / opacity / stroke are
    animated; reduced motion and the "Minimal" motion style get a still mark.
    ========================================================================= */
 .boot {
-  --boot-loop: 3.6s;
+  --boot-loop: 5s; /* = BOOT_SCREEN_MS in app.js: one full loop, then the app */
   --boot-day-off: color-mix(in srgb, var(--text-muted) 34%, transparent);
   position: fixed;
   inset: 0;
@@ -2937,8 +2937,8 @@ html:has(.modal-backdrop), html:has(.modal-backdrop) body { overflow: hidden; }
   margin: 0;
   animation: boot-fade-in 700ms 180ms ease both;
 }
-.boot-brand b { font-size: 0.95rem; letter-spacing: -0.01em; }
-.boot-brand small { font-size: 0.75rem; color: var(--text-muted); letter-spacing: 0.04em; }
+.boot-brand b { font-size: 1.05rem; letter-spacing: -0.01em; }
+.boot-brand small { font-size: 0.875rem; font-weight: 500; color: var(--text-secondary); letter-spacing: 0.03em; }
 .boot-slow {
   margin: 0;
   font-size: 0.85rem;
