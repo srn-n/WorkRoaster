@@ -892,7 +892,7 @@ a { color: var(--accent-text); }
 
 .editing-badge {
   display: inline-flex; align-items: center; gap: 6px;
-  background: var(--amber-subtle); color: var(--amber-text);
+  background: var(--info-subtle); color: var(--info-text);
   padding: 4px 10px; border-radius: var(--radius-sm); font-size: 11.5px; font-weight: 600;
   white-space: nowrap;
 }
@@ -1129,7 +1129,7 @@ a { color: var(--accent-text); }
 .rate-live-row:last-child { border-bottom: 0; }
 .rate-live-label { font: var(--text-label); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
 .rate-live-value { font-size: 13px; font-weight: 650; color: var(--text-primary); font-variant-numeric: tabular-nums; text-align: right; }
-.rate-live-row.is-adjustment .rate-live-value { color: var(--amber-text); }
+.rate-live-row.is-adjustment .rate-live-value { color: var(--info-text); }
 .rate-live-row.is-effective .rate-live-value { color: var(--text-primary); font-size: 14.5px; }
 .rate-live-row.is-total { padding-top: 10px; }
 .rate-live-row.is-total .rate-live-value { font-size: 16px; }
@@ -2832,10 +2832,15 @@ html:has(.modal-backdrop), html:has(.modal-backdrop) body { overflow: hidden; }
    Classic keeps its warm amber, which sits next to its brown accent. The
    other colour themes use their chart colour instead (the same colour as
    the cycle bars), so the calendar matches the rest of the theme rather
-   than staying orange. Warnings and the "Editing" badge keep --amber.
+   than staying orange.
    ========================================================================= */
 :root { --work-mark: var(--amber); }
 :root:is([data-visual="sky"], [data-visual="sage"], [data-visual="plum"]) { --work-mark: var(--chart-bar); }
+/* Informational highlights (the "Editing" badge, the Weekend / Additional
+   rate values): Classic amber, the theme accent elsewhere. Real warnings —
+   a $0 fixed-pay record, being paid less than expected — keep --amber. */
+:root { --info-text: var(--amber-text); --info-subtle: var(--amber-subtle); }
+:root:is([data-visual="sky"], [data-visual="sage"], [data-visual="plum"]) { --info-text: var(--accent-text); --info-subtle: var(--accent-subtle); }
 /* Native date/time fields: browsers that tint their own popup use this. */
 input[type="date"], input[type="time"] { accent-color: var(--accent); }
 

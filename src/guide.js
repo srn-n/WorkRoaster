@@ -268,7 +268,7 @@ export const GUIDE_SECTIONS = [
         body: `<ul>
             <li>A tinted day with a <strong>dot</strong> has a record; a number shows how many records that day has. Longer days are tinted more strongly.</li>
             <li><strong>Today</strong> has a dark outline; the date currently in the record form is <strong>selected</strong> with an accent outline.</li>
-            <li>A thin amber line across the top of a day marks the <strong>active pay cycle</strong> — the cycle the dashboard is showing.</li>
+            <li>A thin line in the theme colour across the top of a day marks the <strong>active pay cycle</strong> — the cycle the dashboard is showing.</li>
           </ul>`,
       },
       {
