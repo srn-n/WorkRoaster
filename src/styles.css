@@ -1248,7 +1248,7 @@ a { color: var(--accent-text); }
 .date-picker-day.is-today { font-weight: 700; box-shadow: inset 0 0 0 1px var(--border-strong); }
 .date-picker-day.has-work::after {
   content: ""; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%);
-  width: 3px; height: 3px; border-radius: 50%; background: var(--amber);
+  width: 3px; height: 3px; border-radius: 50%; background: var(--work-mark);
 }
 .date-picker-day.is-selected { background: var(--accent); color: var(--on-accent); font-weight: 650; }
 .date-picker-day.is-selected::after { background: #fff; }
@@ -1434,7 +1434,7 @@ input[type="time"]::-webkit-calendar-picker-indicator { opacity: 0; width: 1px; 
 .calendar-legend { display: inline-flex; align-items: center; gap: 12px; font-size: 11px; font-weight: 550; color: var(--text-muted); white-space: nowrap; }
 .calendar-legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .calendar-legend .calendar-dot { position: static; }
-.calendar-legend-swatch { width: 8px; height: 8px; border-radius: 2px; box-shadow: inset 0 0 0 1.5px var(--amber); }
+.calendar-legend-swatch { width: 8px; height: 8px; border-radius: 2px; box-shadow: inset 0 0 0 1.5px var(--work-mark); }
 
 .calendar-weekday-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; margin-bottom: 1px; }
 .calendar-weekday { text-align: center; font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); padding: 0 0 7px; }
@@ -1463,9 +1463,9 @@ button.calendar-day { border: 0; margin: 0; font-family: inherit; text-align: le
 .calendar-day.is-today { box-shadow: inset 0 0 0 1.5px var(--text-primary); color: var(--text-primary); font-weight: 650; }
 /* Work-day intensity — a quiet, muted amber wash sized to real minutes
    worked that day. Never a bright heatmap color. */
-.calendar-day.has-work { background: color-mix(in srgb, var(--amber) calc(var(--intensity, 0.4) * 32%), var(--surface-2)); color: var(--text-primary); font-weight: 600; }
-.calendar-day.has-work.is-outside { background: color-mix(in srgb, var(--amber) calc(var(--intensity, 0.4) * 16%), var(--surface-1)); }
-.calendar-day.in-current-cycle::after { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--amber); opacity: 0.75; }
+.calendar-day.has-work { background: color-mix(in srgb, var(--work-mark) calc(var(--intensity, 0.4) * 32%), var(--surface-2)); color: var(--text-primary); font-weight: 600; }
+.calendar-day.has-work.is-outside { background: color-mix(in srgb, var(--work-mark) calc(var(--intensity, 0.4) * 16%), var(--surface-1)); }
+.calendar-day.in-current-cycle::after { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--work-mark); opacity: 0.75; }
 /* The record's selected date — the day the form will save to. */
 .calendar-day.is-selected { box-shadow: inset 0 0 0 2px var(--accent); color: var(--text-primary); font-weight: 700; }
 .calendar-day.is-selected .calendar-daynum { color: var(--accent-text); }
@@ -2825,6 +2825,19 @@ html:has(.modal-backdrop), html:has(.modal-backdrop) body { overflow: hidden; }
   .app-shell { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
 }
 
+
+/* =========================================================================
+   Work marks (calendar work days, active-cycle bar, date-picker work dot)
+   -------------------------------------------------------------------------
+   Classic keeps its warm amber, which sits next to its brown accent. The
+   other colour themes use their chart colour instead (the same colour as
+   the cycle bars), so the calendar matches the rest of the theme rather
+   than staying orange. Warnings and the "Editing" badge keep --amber.
+   ========================================================================= */
+:root { --work-mark: var(--amber); }
+:root:is([data-visual="sky"], [data-visual="sage"], [data-visual="plum"]) { --work-mark: var(--chart-bar); }
+/* Native date/time fields: browsers that tint their own popup use this. */
+input[type="date"], input[type="time"] { accent-color: var(--accent); }
 
 /* =========================================================================
    Loading screen (#boot in index.html)
