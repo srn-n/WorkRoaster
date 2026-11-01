@@ -7,10 +7,12 @@ android {
         applicationId "com.simplymadestudio.workroaster"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // Release builds pass these from the git tag (see the GitHub workflow):
-        //   ./gradlew bundleRelease -PversionCode=10100 -PversionName=1.1.0
+        // The version lives in package.json (one number for the website and
+        // the app). The workflow passes the Play version code from the tag:
+        //   ./gradlew bundleRelease -PversionCode=1 -PversionName=0.0.1
+        def packageVersion = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json')).version as String
         versionCode((project.findProperty('versionCode') ?: '1') as int)
-        versionName((project.findProperty('versionName') ?: '1.0.0') as String)
+        versionName((project.findProperty('versionName') ?: packageVersion) as String)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

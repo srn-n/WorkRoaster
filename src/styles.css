@@ -1095,6 +1095,9 @@ a { color: var(--accent-text); }
 
 .form-error { color: var(--danger); font-size: 12.5px; min-height: 16px; margin: 4px 0 4px; font-weight: 550; }
 .form-actions { display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+/* A long profile name in "Download backup of …" must not push the button
+   past the edge of a phone screen. */
+.form-actions > .btn { max-width: 100%; min-width: 0; overflow-wrap: anywhere; }
 
 /* ------------------------------------------------------------------ */
 /* Start/End timeline                                                 */

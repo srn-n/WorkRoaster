@@ -397,7 +397,7 @@ export const GUIDE_SECTIONS = [
       {
         title: 'All records: JSON backup and CSV',
         keywords: 'backup json csv all records spreadsheet',
-        body: `<p><strong>Backup &amp; export</strong> (top of the page) offers a <strong>JSON backup</strong> — every record plus your settings and jobs — and a <strong>CSV</strong> of all records for spreadsheets. Each record in a backup also names its job and which weekend rule it was paid at (Saturday, Sunday, an override, or none), so the file is readable on its own. With more than one profile, the backup and CSV cover the open profile, and <em>Download all profiles</em> saves every profile in one file.</p>`,
+        body: `<p><strong>Backup &amp; export</strong> (top of the page) offers a <strong>JSON backup</strong> — every record plus your settings and jobs — and a <strong>CSV</strong> of all records for spreadsheets. Each record in a backup also names its job and which weekend rule it was paid at (Saturday, Sunday, an override, or none), so the file is readable on its own. With more than one profile, the backup and CSV cover the open profile, and <em>${IN_APP ? 'Save' : 'Download'} all profiles</em> saves every profile in one file.</p>`,
       },
       {
         title: 'Restoring from a backup',
@@ -445,7 +445,7 @@ export const GUIDE_SECTIONS = [
         title: 'Profiles: separate workspaces',
         keywords: 'profile profiles workspace side job side hustle switch separate rename delete',
         body: `<p>A <strong>profile</strong> is a separate set of records, jobs and settings (including the pay cycle) on this device — for example your main job with a Monday–Sunday cycle and a side hustle paid Tuesday–Monday. Add one in <strong>Settings → Profiles</strong>; once there are two, a <strong>Profile</strong> switcher appears at the top of the page. The theme is shared.</p>
-          <p>The records you already had are the first profile, <em>My profile</em>. It can be renamed but not deleted. Deleting any other profile asks first and permanently erases its records, jobs and settings, so download a backup before you do. A profile isn't a login: anyone using ${IN_APP ? 'this phone' : 'this browser'} can switch between them.</p>`,
+          <p>The records you already had are the first profile, <em>My profile</em>. It can be renamed but not deleted. Deleting any other profile asks first and permanently erases its records, jobs and settings, so ${IN_APP ? 'save' : 'download'} a backup before you do. A profile isn't a login: anyone using ${IN_APP ? 'this phone' : 'this browser'} can switch between them.</p>`,
       },
       {
         title: 'Appearance: themes, top bar and motion',

@@ -2,6 +2,21 @@
 
 All notable changes to WorkRoaster are listed here.
 
+## 0.0.1 — 2026-11-02 (first Android release)
+
+Version numbers start here: `package.json` holds the one version for the
+website and the app, shown in Settings → Privacy & terms.
+
+- Security hardening from an offensive test of the Android app:
+  - Capacitor's internal file routes (`/_capacitor_file_`, `/_capacitor_content_`) are closed.
+  - The main screen can't be hijacked by another app's task (`taskAffinity=""`).
+  - "Save as" only accepts WorkRoaster's own file types, cleans file names and refuses absurd sizes.
+  - Build actions are pinned to commit SHAs and the Gradle wrapper is verified.
+- Release tags must match the `package.json` version; test builds are named `<version>-debug.<run>`.
+- In the app, backup buttons say "Save" instead of "Download".
+- Long profile names no longer push the backup button off a phone screen.
+- Feedback device details include the WorkRoaster version.
+
 ## 2026-11-01
 
 - Android app project (Capacitor 8, targets Android 16 / API 36, as Google Play requires).

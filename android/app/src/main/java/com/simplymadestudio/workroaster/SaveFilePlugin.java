@@ -13,6 +13,9 @@ import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * "Save as" for exports and backups. A WebView ignores <a download>, so the
@@ -24,14 +27,41 @@ import java.io.OutputStream;
 @CapacitorPlugin(name = "SaveFile")
 public class SaveFilePlugin extends Plugin {
 
+    // The only kinds of file WorkRoaster makes. Anything else is saved as
+    // generic data, so the page can't ask Android to treat it as, say, an
+    // installable app package.
+    private static final Set<String> ALLOWED_TYPES = new HashSet<>(
+        Arrays.asList(
+            "application/pdf",
+            "image/jpeg",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/json",
+            "text/csv"
+        )
+    );
+
+    // Real exports and backups are a few MB; refuse anything absurd rather
+    // than run the phone out of memory decoding it.
+    private static final int MAX_BASE64_CHARS = 40 * 1024 * 1024;
+
     @PluginMethod
     public void save(PluginCall call) {
         String filename = call.getString("filename");
         String data = call.getString("data");
-        String mimeType = call.getString("mimeType", "application/octet-stream");
+        String requestedType = call.getString("mimeType", "application/octet-stream");
+        String mimeType = ALLOWED_TYPES.contains(requestedType) ? requestedType : "application/octet-stream";
         if (filename == null || filename.isEmpty() || data == null) {
             call.reject("Missing file name or contents.");
             return;
+        }
+        if (data.length() > MAX_BASE64_CHARS) {
+            call.reject("The file is too large to save.");
+            return;
+        }
+        // A display name only (the person picks the folder); no path parts.
+        filename = filename.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_");
+        if (filename.length() > 120) {
+            filename = filename.substring(0, 120);
         }
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);

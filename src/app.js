@@ -245,6 +245,12 @@ const SETTINGS_MOTION_MS = 240;
 /** Backup picker types. Android file managers often label a .json file as
  *  plain text or octet-stream, which a strict "application/json" would grey
  *  out; the import itself still checks that it really is a backup. */
+/** Button wording: the website downloads files; the app saves them through
+ *  Android's "Save as" dialog. */
+const FILE_VERB = isNativeApp() ? 'Save' : 'Download';
+/** From package.json at build time (vite.config.js); shown in Settings →
+ *  Privacy & terms and added to feedback device details. */
+const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
 const BACKUP_ACCEPT = isNativeApp() ? 'application/json,.json,text/plain,application/octet-stream' : 'application/json';
 function showToast(message, tone = 'success') {
   // A save that just failed must never be followed by "Record added." etc.
@@ -2251,7 +2257,7 @@ function handleProfileAction(action, id) {
     }
     if (action === 'delete') {
       const count = id === store.getActiveProfileId() ? state.records.length : store.loadRecordsFor(id).length;
-      if (!confirm(`Delete the profile “${profile.name}” and its ${count} record(s), jobs and notes from this device? This cannot be undone — download a backup of it first if unsure.`)) return;
+      if (!confirm(`Delete the profile “${profile.name}” and its ${count} record(s), jobs and notes from this device? This cannot be undone — ${FILE_VERB.toLowerCase()} a backup of it first if unsure.`)) return;
       const wasActive = id === store.getActiveProfileId();
       store.deleteProfile(id);
       if (wasActive) {
@@ -2330,6 +2336,7 @@ function legalTab() {
     <div class="field">
       <label>Made by Simply Made Studio</label>
       <small class="field-help">WorkRoaster is designed and maintained by <a href="${LEGAL_LINKS.studio}" target="_blank" rel="noopener">Simply Made Studio</a>.</small>
+      <small class="field-help app-version">Version ${esc(APP_VERSION)}</small>
     </div>`;
 }
 
@@ -3018,9 +3025,9 @@ function renderDataModal() {
             <h3>${icon('download', 'icon-sm')}Export</h3>
             <p class="panel-hint">${hasProfiles() ? `Save a backup of this profile (${esc(activeProfile().name)}: records, jobs and settings) or of every profile, or a spreadsheet-friendly CSV of this profile's records.` : 'Save a full backup (records + settings), or a spreadsheet-friendly CSV of your records.'}</p>
             <div class="form-actions">
-              <button class="btn secondary" id="btn-export-json" type="button">${hasProfiles() ? `Download backup of ${esc(activeProfile().name)}` : 'Download JSON backup'}</button>
-              ${hasProfiles() ? '<button class="btn secondary" id="btn-export-all-profiles" type="button">Download all profiles</button>' : ''}
-              <button class="btn secondary" id="btn-export-csv" type="button" ${state.records.length ? '' : 'disabled'}>Download CSV</button>
+              <button class="btn secondary" id="btn-export-json" type="button">${hasProfiles() ? `${FILE_VERB} backup of ${esc(activeProfile().name)}` : `${FILE_VERB} JSON backup`}</button>
+              ${hasProfiles() ? `<button class="btn secondary" id="btn-export-all-profiles" type="button">${FILE_VERB} all profiles</button>` : ''}
+              <button class="btn secondary" id="btn-export-csv" type="button" ${state.records.length ? '' : 'disabled'}>${FILE_VERB} CSV</button>
             </div>
           </div>
           <div class="data-section">
@@ -5019,6 +5026,8 @@ function feedbackDevice() {
   if (!feedbackIncludeDevice) return '';
   const visual = state.settings.visualTheme || 'classic';
   return feedbackDeviceSummary({
+    version: APP_VERSION,
+    app: isNativeApp(),
     userAgent: navigator.userAgent,
     screen: `${window.innerWidth}×${window.innerHeight} @${window.devicePixelRatio || 1}x`,
     theme: `${visual} / ${state.settings.theme}`,

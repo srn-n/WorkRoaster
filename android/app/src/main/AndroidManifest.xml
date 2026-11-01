@@ -11,6 +11,8 @@
         starts when setting up a new phone; nothing passes through a server.)
       - No storage permission: files are saved through Android's own
         "Save as" dialog, to the folder the person chooses.
+      - taskAffinity="": another app can't slip its own screen into
+        WorkRoaster's task to pose as it (task hijacking / StrandHogg).
     -->
     <application
         android:allowBackup="false"
@@ -26,6 +28,7 @@
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
+            android:taskAffinity=""
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

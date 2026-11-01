@@ -24,6 +24,7 @@ const MAX_URL_LENGTH = 1900;
  *  person chooses to include it (helps reproduce layout bugs on phones). */
 export function feedbackDeviceSummary(env = {}) {
   const parts = [];
+  if (env.version) parts.push(`WorkRoaster: ${String(env.version).slice(0, 40)}${env.app ? ' (Android app)' : ' (website)'}`);
   if (env.userAgent) parts.push(`Browser: ${String(env.userAgent).slice(0, 180)}`);
   if (env.screen) parts.push(`Screen: ${env.screen}`);
   if (env.theme) parts.push(`Theme: ${env.theme}`);

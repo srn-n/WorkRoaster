@@ -47,3 +47,36 @@ test('signing secrets come from the environment, never the repo', () => {
   assert.match(gradle, /System\.getenv\('WORKROASTER_KEYSTORE_PATH'\)/);
   assert.doesNotMatch(gradle, /storePassword\s+['"]/);
 });
+
+test('only the launcher screen is reachable from other apps, and it cannot be hijacked', () => {
+  const exported = [...manifest.matchAll(/android:exported="true"/g)].length;
+  assert.equal(exported, 1, 'only MainActivity may be exported');
+  assert.match(manifest, /android:taskAffinity=""/);
+  // No deep links / custom schemes: the only intent filter is the launcher.
+  const filters = [...manifest.matchAll(/<intent-filter>([\s\S]*?)<\/intent-filter>/g)].map((m) => m[1]);
+  assert.equal(filters.length, 1);
+  assert.match(filters[0], /android\.intent\.action\.MAIN/);
+  assert.doesNotMatch(manifest, /<data\b/);
+});
+
+test("Capacitor's internal file routes are closed in the app", () => {
+  const main = read('android/app/src/main/java/com/simplymadestudio/workroaster/MainActivity.java');
+  assert.match(main, /Bridge\.CAPACITOR_FILE_START/);
+  assert.match(main, /Bridge\.CAPACITOR_CONTENT_START/);
+  assert.match(main, /403/);
+});
+
+test('the app never loads remote content or opens other origins in its WebView', () => {
+  assert.equal(config.server, undefined);
+  assert.equal(config.android?.allowMixedContent, false);
+  assert.equal(config.plugins?.CapacitorHttp?.enabled ?? false, false);
+  assert.equal((config.allowNavigation || config.server?.allowNavigation || []).length, 0);
+});
+
+
+test('one version for the website and the app (package.json)', () => {
+  assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
+  assert.match(read('android/app/build.gradle'), /JsonSlurper\(\)\.parse\(rootProject\.file\('\.\.\/package\.json'\)\)\.version/);
+  assert.match(read('vite.config.js'), /__APP_VERSION__/);
+  assert.match(read('.github/workflows/build-android-apk.yml'), /does not match package\.json version/);
+});

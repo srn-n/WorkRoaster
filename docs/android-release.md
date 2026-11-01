@@ -14,7 +14,7 @@ GitHub Actions does all of this (`.github/workflows/build-android-apk.yml`):
 | You push… | You get (Actions → the run → Artifacts) |
 |---|---|
 | a commit to `main` | `WorkRoaster-debug-APK`: install on your own phone to test |
-| a tag like `v1.0.0` | `WorkRoaster-1.0.0-release`: `app-release.aab` (for Play) + `app-release.apk` |
+| a tag like `v0.0.1` | `WorkRoaster-0.0.1-release`: `app-release.aab` (for Play) + `app-release.apk` |
 
 Every build runs the unit tests first, and checks the finished APK has no
 `INTERNET` permission. A failed check stops the build.
@@ -71,17 +71,21 @@ first**, uninstall the debug app, then install from Play and restore.
 
 ## Each release
 
-1. Choose the version: `v1.0.0` for the first one, then higher every time
-   (`v1.0.1` for fixes, `v1.1.0` for features). Play rejects a version code it
-   has already seen. The workflow turns `v1.2.3` into version code `10203`.
-2. Tag and push:
+1. Set the version in `package.json` (`"version": "0.0.1"` for the first one;
+   `npm version 0.0.2 --no-git-tag-version` later), commit and push. It is the
+   one version for the website and the app, and shows in Settings → Privacy &
+   terms. Go higher every time (`0.0.2` for fixes, `0.1.0` for features):
+   Play rejects a version code it has already seen. The workflow turns `1.2.3`
+   into version code `10203` (so `0.0.1` is `1`).
+2. Tag that exact version and push the tag:
 
    ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
+   git tag v0.0.1
+   git push origin v0.0.1
    ```
 
-3. Download the `WorkRoaster-1.0.0-release` artifact and upload `app-release.aab`
+   A tag that doesn't match `package.json` stops the build with a clear message.
+3. Download the `WorkRoaster-0.0.1-release` artifact and upload `app-release.aab`
    in Play Console (see below).
 
 ## Google Play Console (first release)

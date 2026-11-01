@@ -1,6 +1,6 @@
 {
   "name": "workroaster",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "A simple personal work-hours and earnings tracker — vanilla JS, no build-heavy framework, your data stays in your browser.",
   "type": "module",
   "private": true,
