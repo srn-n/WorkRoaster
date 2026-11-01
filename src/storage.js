@@ -18,6 +18,7 @@
 import { recordMinutes, getCycleForDate, hasEndTime, normalizeRule, normalizeFixedPay, isFixedPayMode, dateRuleKind, normalizeCycleAnchor, DEFAULT_CYCLE_ANCHOR } from './calculations.js';
 import { normalizeJob, findJob, makeJobId } from './jobs.js';
 import { safeId } from './ids.js';
+import { saveBlob } from './save-file.js';
 
 export const RECORDS_KEY = 'modern_work_hours_tracker_v1';
 export const SETTINGS_KEY = 'modern_work_hours_tracker_v1_settings';
@@ -964,14 +965,7 @@ export function recordsToCSV(records, cycleLengthDays = 14, jobs = [], cycleAnch
   return [headers, ...safeRows].map((row) => row.map(csvCell).join(',')).join('\r\n');
 }
 
+/** Resolves to 'downloaded', 'saved' or 'cancelled' (see save-file.js). */
 export function downloadFile(filename, content, mimeType) {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  return saveBlob(new Blob([content], { type: mimeType }), filename);
 }

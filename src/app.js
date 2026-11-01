@@ -17,6 +17,7 @@ import { buildFeedbackEmail, feedbackDeviceSummary, FEEDBACK_EMAIL, FEEDBACK_MAX
 import { GUIDE_INTRO, GUIDE_SECTIONS } from './guide.js';
 import { renderCalculator, wireCalculator } from './calculator.js';
 import { isSupportedCurrency, normalizeCurrencyInput } from './currency.js';
+import { isNativeApp } from './platform.js';
 // export.js pulls in jsPDF (which itself bundles html2canvas/DOMPurify)
 // and ExcelJS — a few hundred KB the core tracker doesn't need just to
 // add a record. Loaded lazily, on first export click, so page load stays
@@ -96,6 +97,8 @@ let formOverrideMode = 'default'; // 'default' | 'none' | 'custom'
 let formOverrideRule = { type: 'percent', value: 0 };
 let formAdditionalOverrideMode = 'default'; // 'default' | 'none'
 let rateConfirmationDialog = null;
+/** native.js once loaded (Android app only; see initNativeApp). */
+let nativeModule = null;
 // Pay-cycle history expand/collapse — presentation only. Holds only the
 // cycles the user has explicitly toggled (cycle key -> open?); anything
 // absent falls back to the graph's cycle (see renderRecords). Never persisted, never
@@ -201,7 +204,9 @@ function persist() {
   }
 }
 
-const PERSIST_FAILED_MESSAGE = 'That change couldn’t be saved — this browser’s storage is full or blocked. Nothing was changed; free up space or leave private browsing, then try again.';
+const PERSIST_FAILED_MESSAGE = isNativeApp()
+  ? 'That change couldn’t be saved — the app’s storage is full. Nothing was changed; free up space on your phone, then try again.'
+  : 'That change couldn’t be saved — this browser’s storage is full or blocked. Nothing was changed; free up space or leave private browsing, then try again.';
 
 let toastTimer = null;
 // Modal entry animation plays only on the render where a modal actually
@@ -237,6 +242,10 @@ let settingsMotionFallbackTimer = null;
 // navigateSettingsTab() drives this with CSS/keyframes rather than the
 // View Transitions API (see its own comment for why).
 const SETTINGS_MOTION_MS = 240;
+/** Backup picker types. Android file managers often label a .json file as
+ *  plain text or octet-stream, which a strict "application/json" would grey
+ *  out; the import itself still checks that it really is a backup. */
+const BACKUP_ACCEPT = isNativeApp() ? 'application/json,.json,text/plain,application/octet-stream' : 'application/json';
 function showToast(message, tone = 'success') {
   // A save that just failed must never be followed by "Record added." etc.
   if (persistFailedAt && Date.now() - persistFailedAt < 1000) {
@@ -280,6 +289,24 @@ function syncBrowserBarColor() {
       m.setAttribute('content', bg);
     } else m.remove();
   });
+  // Android app: the page runs edge to edge behind the system bars, so their
+  // icons must contrast with the page colour (light icons on a dark theme).
+  if (nativeModule) nativeModule.setBarsForDarkPage(isDarkColor(bg));
+}
+
+/** True for a dark CSS colour (#rgb, #rrggbb or rgb()/rgba()). */
+function isDarkColor(value) {
+  let r, g, b;
+  const hex = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hex) {
+    const h = hex[1].length === 3 ? hex[1].split('').map((c) => c + c).join('') : hex[1];
+    [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  } else {
+    const rgb = value.match(/rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i);
+    if (!rgb) return false;
+    [r, g, b] = rgb.slice(1, 4).map(Number);
+  }
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 128;
 }
 if (typeof window !== 'undefined' && window.matchMedia) {
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => syncBrowserBarColor());
@@ -2177,7 +2204,7 @@ function profilesTab() {
   const { profiles } = profileIndex();
   const activeId = store.getActiveProfileId();
   return `
-    <p class="panel-hint">Profiles keep separate sets of records, jobs and settings on this device — for example your main job with a Monday–Sunday pay cycle and a side job paid Tuesday–Monday. Each has its own history, graph and backups. The theme is shared. A profile isn't a login: anyone using this browser can switch between them.</p>
+    <p class="panel-hint">Profiles keep separate sets of records, jobs and settings on this device — for example your main job with a Monday–Sunday pay cycle and a side job paid Tuesday–Monday. Each has its own history, graph and backups. The theme is shared. A profile isn't a login: anyone using ${isNativeApp() ? 'this phone' : 'this browser'} can switch between them.</p>
     <ul class="option-list profile-list">
       ${profiles
         .map((p) => {
@@ -2286,7 +2313,7 @@ function legalTab() {
   return `
     <div class="field">
       <label>Your data stays on this device</label>
-      <small class="field-help">WorkRoaster has no accounts, ads, analytics or tracking. Your records, jobs, pay settings and profiles are saved in this browser's local storage and are never sent to us. Exports are created on your device and saved where you choose.</small>
+      <small class="field-help">WorkRoaster has no accounts, ads, analytics or tracking. Your records, jobs, pay settings and profiles are saved ${isNativeApp() ? "only on this device, in the app's private storage (the app has no internet access)," : "in this browser's local storage"} and are never sent to us. Exports are created on your device and saved where you choose.</small>
     </div>
     <div class="field">
       <label>Not financial advice</label>
@@ -2324,7 +2351,7 @@ function feedbackTab() {
     </div>
     <label class="checkbox-field feedback-device" for="feedback-device">
       <input type="checkbox" id="feedback-device" ${feedbackIncludeDevice ? 'checked' : ''}>
-      <span>Add browser and screen details (helps with layout bugs)</span>
+      <span>Add ${isNativeApp() ? 'device' : 'browser'} and screen details (helps with layout bugs)</span>
     </label>
     <div class="feedback-actions">
       <button class="btn primary" id="btn-feedback-submit" type="button">${icon('arrowRight', 'icon-sm')}Send feedback</button>
@@ -2999,7 +3026,7 @@ function renderDataModal() {
           <div class="data-section">
             <h3>${icon('restore', 'icon-sm')}Restore</h3>
             <p class="panel-hint">Import a JSON backup. Choose whether to merge it with your current records or replace them entirely.</p>
-            <input type="file" id="import-file" accept="application/json" class="visually-hidden" tabindex="-1" aria-hidden="true" aria-label="Backup file to import">
+            <input type="file" id="import-file" accept="${BACKUP_ACCEPT}" class="visually-hidden" tabindex="-1" aria-hidden="true" aria-label="Backup file to import">
             <div class="form-actions">
               <button class="btn secondary" id="btn-import-merge" type="button">Import &amp; merge</button>
               <button class="btn secondary" id="btn-import-replace" type="button">Import &amp; replace all</button>
@@ -4932,23 +4959,38 @@ function profileFileTag() {
   return hasProfiles() ? `-${(activeProfile().name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'profile').slice(0, 24)}` : '';
 }
 
+/** The message after a file is handed over. The website downloads straight
+ *  away ("downloaded"); the Android app asks where to save it ("saved"), and
+ *  if the person closes that dialog nothing happened, so nothing is said. */
+function fileToast(result, message) {
+  if (result === 'cancelled') return;
+  showToast(result === 'saved' ? message.replace(/\bdownloaded\b/, 'saved') : message);
+}
+
+async function saveFileWithToast(filename, content, mimeType, message) {
+  try {
+    fileToast(await store.downloadFile(filename, content, mimeType), message);
+  } catch (err) {
+    showToast(err.message || 'The file could not be saved.', 'error');
+  }
+}
+
 function exportJSON() {
   const backup = store.buildBackup(state.records, state.settings, hasProfiles() ? activeProfile().name : null, state.notes);
-  store.downloadFile(`workroaster-backup${profileFileTag()}-${calc.todayString()}.json`, JSON.stringify(backup, null, 2), 'application/json');
-  showToast(hasProfiles() ? `Backup of ${activeProfile().name} downloaded.` : 'Backup downloaded.');
+  return saveFileWithToast(`workroaster-backup${profileFileTag()}-${calc.todayString()}.json`, JSON.stringify(backup, null, 2), 'application/json',
+    hasProfiles() ? `Backup of ${activeProfile().name} downloaded.` : 'Backup downloaded.');
 }
 
 function exportAllProfilesJSON() {
   persist();
   const backup = store.buildAllProfilesBackup();
-  store.downloadFile(`workroaster-backup-all-profiles-${calc.todayString()}.json`, JSON.stringify(backup, null, 2), 'application/json');
-  showToast(`Backup of all ${backup.profiles.length} profiles downloaded.`);
+  return saveFileWithToast(`workroaster-backup-all-profiles-${calc.todayString()}.json`, JSON.stringify(backup, null, 2), 'application/json',
+    `Backup of all ${backup.profiles.length} profiles downloaded.`);
 }
 
 function exportCSV() {
   const csv = store.recordsToCSV(state.records, state.settings.payCycleLengthDays, state.settings.jobs, state.settings.payCycleAnchor);
-  store.downloadFile(`workroaster-records${profileFileTag()}-${calc.todayString()}.csv`, csv, 'text/csv');
-  showToast('CSV downloaded.');
+  return saveFileWithToast(`workroaster-records${profileFileTag()}-${calc.todayString()}.csv`, csv, 'text/csv', 'CSV downloaded.');
 }
 
 // -- Per-cycle export (PDF / JPG / Excel) --------------------------------
@@ -4960,10 +5002,11 @@ async function handleCycleExport(format, cycleKey, visibility = state.settings.e
   try {
     const options = { currency: state.settings.currency, visibility: store.normalizeExportVisibility(visibility), jobs: state.settings.jobs };
     const exportModule = await import('./export.js');
-    if (format === 'pdf') exportModule.exportCyclePDF(cycle, options);
-    else if (format === 'jpg') exportModule.exportCycleJPG(cycle, options);
-    else if (format === 'xlsx') await exportModule.exportCycleExcel(cycle, options);
-    showToast(`${format.toUpperCase()} downloaded — all records in ${cycle.cycleLabel}.`);
+    let result;
+    if (format === 'pdf') result = await exportModule.exportCyclePDF(cycle, options);
+    else if (format === 'jpg') result = await exportModule.exportCycleJPG(cycle, options);
+    else if (format === 'xlsx') result = await exportModule.exportCycleExcel(cycle, options);
+    fileToast(result, `${format.toUpperCase()} downloaded — all records in ${cycle.cycleLabel}.`);
   } catch (err) {
     showToast(err.message || 'Export failed.', 'error');
   }
@@ -5043,10 +5086,11 @@ async function handleJobExport(format, cycleKey, jobKey, visibility = state.sett
     const options = { currency: state.settings.currency, visibility: store.normalizeExportVisibility(visibility), jobs: state.settings.jobs };
     const exportModule = await import('./export.js');
     const scoped = exportModule.jobScopedGroup(cycle, jobKey, jobGroup.name);
-    if (format === 'pdf') exportModule.exportCyclePDF(scoped, options);
-    else if (format === 'jpg') exportModule.exportCycleJPG(scoped, options);
-    else if (format === 'xlsx') await exportModule.exportCycleExcel(scoped, options);
-    showToast(`${format.toUpperCase()} downloaded — ${jobGroup.name} in ${cycle.cycleLabel}.`);
+    let result;
+    if (format === 'pdf') result = await exportModule.exportCyclePDF(scoped, options);
+    else if (format === 'jpg') result = await exportModule.exportCycleJPG(scoped, options);
+    else if (format === 'xlsx') result = await exportModule.exportCycleExcel(scoped, options);
+    fileToast(result, `${format.toUpperCase()} downloaded — ${jobGroup.name} in ${cycle.cycleLabel}.`);
   } catch (err) {
     showToast(err.message || 'Export failed.', 'error');
   }
@@ -5753,6 +5797,7 @@ document.addEventListener('focusout', () => {
 
 initPickerGlobalListeners();
 window.addEventListener('hashchange', onHashChange);
+if (isNativeApp()) initNativeApp();
 render();
 dismissBootScreen();
 
@@ -5786,4 +5831,51 @@ function dismissBootScreen() {
     boot.addEventListener('transitionend', (e) => { if (e.target === boot) remove(); });
     setTimeout(remove, 900); // in case transitionend never fires
   }, wait);
+}
+
+// -- Android app only ------------------------------------------------------
+// Loaded only inside the app (platform.js); the website never fetches it.
+// (nativeModule itself is declared near the top: render() runs before here.)
+
+function initNativeApp() {
+  import('./native.js')
+    .then((native) => {
+      nativeModule = native;
+      native.onBackButton(handleBackButton);
+      syncBrowserBarColor();
+    })
+    .catch(() => { /* the app still works; only back/bar styling are lost */ });
+}
+
+/** Android back: close whatever is on top first, the way Escape does on a
+ *  computer; only on the main screen does back leave the app. */
+function handleBackButton() {
+  if (datePickerOpen || jobPickerOpen || timePickerOpen || optionPickerOpenId) {
+    if (datePickerOpen) closeDatePicker();
+    if (jobPickerOpen) closeJobPicker();
+    if (timePickerOpen) closeTimePicker();
+    if (optionPickerOpenId) closeOptionPicker();
+    return;
+  }
+  const openDialogs = document.querySelectorAll('dialog[open]');
+  if (openDialogs.length) {
+    openDialogs[openDialogs.length - 1].close();
+    return;
+  }
+  if (state.modal) {
+    closeModal();
+    return;
+  }
+  if (state.noteEditingId) {
+    const id = state.noteEditingId;
+    state.noteEditingId = null;
+    focusAfterRender = focusById(`note-edit-btn-${id}`);
+    render();
+    return;
+  }
+  if (state.view === 'notes') {
+    navigateTo('home');
+    return;
+  }
+  nativeModule?.leaveApp();
 }

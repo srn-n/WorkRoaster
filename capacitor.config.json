@@ -1,0 +1,14 @@
+{
+  "appId": "com.simplymadestudio.workroaster",
+  "appName": "WorkRoaster",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "style": "DEFAULT"
+    }
+  }
+}

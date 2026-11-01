@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!--
+      WorkRoaster's promises, enforced by the platform:
+      - No INTERNET permission: the app loads its own files from the phone and
+        cannot open a network connection at all. Links and feedback emails are
+        handed to the person's browser / email app.
+      - allowBackup="false": records are not copied to Google's cloud backup.
+        (Android 12+ still allows a direct phone-to-phone transfer the person
+        starts when setting up a new phone; nothing passes through a server.)
+      - No storage permission: files are saved through Android's own
+        "Save as" dialog, to the folder the person chooses.
+    -->
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="false"
+        android:theme="@style/AppTheme">
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Only Capacitor's own temporary files (app cache), never shared storage. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+
+    <!-- Strip INTERNET even if a future library's manifest asks for it. The
+         build workflow also checks the finished APK for it. -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+</manifest>

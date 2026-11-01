@@ -75,6 +75,33 @@ npm run preview   # optional: preview the production build locally
 The build output lands in `dist/` and is a plain set of static files —
 no server-side code required.
 
+## Android app
+
+The same code ships as an Android app through [Capacitor](https://capacitorjs.com/):
+the built `dist/` folder is packaged inside the app and loaded from the phone,
+so it works offline. App ID: `com.simplymadestudio.workroaster`.
+
+The app keeps the website's promises, and the platform enforces them:
+
+- **No network access.** The app has no `INTERNET` permission. Links and
+  feedback emails open in the person's own browser / email app.
+- **No cloud backup.** `allowBackup="false"`: records are not copied to
+  Google's backup.
+- **No sign-in, ads, analytics or tracking libraries.** No storage permission
+  either: exports and backups use Android's own "Save as" dialog.
+
+`tests/unit/android-promises.test.mjs` fails if any of this changes, and the
+build workflow checks the finished APK for the `INTERNET` permission.
+
+```bash
+npm run build && npx cap sync android   # copy the web app into android/
+```
+
+GitHub Actions (`.github/workflows/build-android-apk.yml`) builds a debug APK
+on every push to `main`, and a signed release (`.aab` for Google Play plus an
+`.apk`) for every `v*` tag. Release steps, signing and Play Console setup:
+[`docs/android-release.md`](docs/android-release.md).
+
 ## Project structure
 
 ```
@@ -88,7 +115,9 @@ WorkTrack/
 │   ├── storage.js       # localStorage load/save, migration, backup/CSV
 │   ├── settings.js      # configurable option-list logic (day/payment types)
 │   └── styles.css       # design tokens + component styles, light & dark
-├── assets/               # icons/images (currently empty — add your own)
+├── assets/               # app icon + splash sources for the Android app
+├── android/              # Android (Capacitor) project
+├── capacitor.config.json
 └── docs/
     └── data-model.md     # record & settings shape, migration notes
 ```

@@ -17,6 +17,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
 import * as calc from './calculations.js';
+import { saveBlob } from './save-file.js';
 
 const APP_TITLE = 'WorkRoaster';
 // WorkRoaster is made by Simply Made Studio. Exports credit the studio —
@@ -324,7 +325,7 @@ export function exportCyclePDF(group, { currency = 'AUD', visibility, jobs } = {
   // guarantee): make sure the last page is always watermarked too.
   drawPdfWatermark(doc);
 
-  doc.save(`${cycleFilenameBase(group)}.pdf`);
+  return saveBlob(doc.output('blob'), `${cycleFilenameBase(group)}.pdf`);
 }
 
 // ---------------------------------------------------------------------
@@ -423,14 +424,7 @@ export async function exportCycleExcel(group, { currency = 'AUD', visibility, jo
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${cycleFilenameBase(group)}.xlsx`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  return saveBlob(blob, `${cycleFilenameBase(group)}.xlsx`);
 }
 
 // ---------------------------------------------------------------------
@@ -603,19 +597,17 @@ export function exportCycleJPG(group, { currency = 'AUD', visibility, jobs } = {
   ctx.font = '10px Arial, Helvetica, sans-serif';
   ctx.fillText(WATERMARK_PLAIN, 30, height - 12);
 
-  canvas.toBlob(
-    (blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${cycleFilenameBase(group)}.jpg`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    },
-    'image/jpeg',
-    0.92
-  );
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error('The image could not be created.'));
+          return;
+        }
+        saveBlob(blob, `${cycleFilenameBase(group)}.jpg`).then(resolve, reject);
+      },
+      'image/jpeg',
+      0.92
+    );
+  });
 }

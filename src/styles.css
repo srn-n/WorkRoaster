@@ -2756,6 +2756,33 @@ button, a, input, select, textarea, label, [role="button"], [role="option"], [ro
   .note-actions { opacity: 1; }
 }
 
+/* Android app (html.is-native, set by boot.js before the first paint). The
+   app runs edge to edge on every screen size, so the system-bar insets apply
+   on tablets as well as phones; Capacitor provides them as
+   --safe-area-inset-* (env() is unreliable in older Android WebViews). A
+   solid strip in the page colour keeps scrolled content from showing behind
+   the status-bar icons. :where() keeps these as weak as the plain rules, so
+   the phone block below still refines them. */
+:where(html.is-native) .app-shell {
+  padding-left: max(24px, var(--safe-area-inset-left, env(safe-area-inset-left)));
+  padding-right: max(24px, var(--safe-area-inset-right, env(safe-area-inset-right)));
+  padding-bottom: calc(96px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom)));
+}
+:where(html.is-native) .command-bar {
+  top: var(--safe-area-inset-top, env(safe-area-inset-top));
+  margin-top: var(--safe-area-inset-top, env(safe-area-inset-top));
+}
+.status-bar-scrim { display: none; }
+:where(html.is-native) .status-bar-scrim {
+  display: block;
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: var(--safe-area-inset-top, env(safe-area-inset-top));
+  background: var(--bg);
+  z-index: calc(var(--z-sticky) + 1);
+  pointer-events: none;
+}
+
 @media (max-width: 560px) {
   /* Readable small print on a phone (labels were 10.5px, graph day
      numbers 8.5px). */
@@ -2767,27 +2794,27 @@ button, a, input, select, textarea, label, [role="button"], [role="option"], [ro
 
   /* Notch / rounded corners / home bar (viewport-fit=cover in index.html). */
   .app-shell {
-    padding-left: max(16px, env(safe-area-inset-left));
-    padding-right: max(16px, env(safe-area-inset-right));
-    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    padding-left: max(16px, var(--safe-area-inset-left, env(safe-area-inset-left)));
+    padding-right: max(16px, var(--safe-area-inset-right, env(safe-area-inset-right)));
+    padding-bottom: calc(72px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom)));
   }
-  .command-bar { top: calc(8px + env(safe-area-inset-top)); margin-top: calc(8px + env(safe-area-inset-top)); }
-  .toast { bottom: calc(16px + env(safe-area-inset-bottom)); max-width: calc(100vw - 32px); }
+  .command-bar { top: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top))); margin-top: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top))); }
+  .toast { bottom: calc(16px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom))); max-width: calc(100vw - 32px); }
 
   /* Dialogs become bottom sheets: full width, as tall as needed, with the
      home bar kept clear, and only the sheet scrolls — never the page. */
-  .modal-backdrop { align-items: flex-end; padding: env(safe-area-inset-top) 0 0; }
+  .modal-backdrop { align-items: flex-end; padding: var(--safe-area-inset-top, env(safe-area-inset-top)) 0 0; }
   .modal {
     max-width: none; width: 100%;
     max-height: calc(100vh - 16px);
-    max-height: calc(100dvh - 16px - env(safe-area-inset-top));
+    max-height: calc(100dvh - 16px - var(--safe-area-inset-top, env(safe-area-inset-top)));
     border-radius: 20px 20px 0 0; border-bottom: 0;
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom));
     overscroll-behavior: contain;
   }
   .modal.settings-modal, .modal.settings-modal.guide-modal {
     height: calc(100vh - 16px);
-    height: calc(100dvh - 16px - env(safe-area-inset-top));
+    height: calc(100dvh - 16px - var(--safe-area-inset-top, env(safe-area-inset-top)));
   }
   .modal.is-entering { animation-name: sheet-in; }
 
@@ -2822,7 +2849,7 @@ html:has(.modal-backdrop), html:has(.modal-backdrop) body { overflow: hidden; }
    page fits in the short screen. */
 @media (max-height: 500px) and (orientation: landscape) {
   .command-bar { top: 4px; margin-top: 4px; padding-top: 6px; padding-bottom: 6px; }
-  .app-shell { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .app-shell { padding-left: max(16px, var(--safe-area-inset-left, env(safe-area-inset-left))); padding-right: max(16px, var(--safe-area-inset-right, env(safe-area-inset-right))); }
 }
 
 
@@ -2866,7 +2893,7 @@ input[type="date"], input[type="time"] { accent-color: var(--accent); }
   align-items: center;
   justify-content: center;
   gap: 18px;
-  padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  padding: max(24px, var(--safe-area-inset-top, env(safe-area-inset-top))) 24px max(24px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom)));
   background:
     radial-gradient(60vmax 60vmax at 18% 12%, var(--canvas-glow-1), transparent 62%),
     radial-gradient(55vmax 55vmax at 86% 92%, var(--canvas-glow-2), transparent 60%),
@@ -2947,7 +2974,7 @@ input[type="date"], input[type="time"] { accent-color: var(--accent); }
   position: absolute;
   left: 0;
   right: 0;
-  bottom: max(28px, calc(env(safe-area-inset-bottom) + 16px));
+  bottom: max(28px, calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom)) + 16px));
   display: flex;
   flex-direction: column;
   align-items: center;

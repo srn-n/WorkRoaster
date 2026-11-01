@@ -16,8 +16,14 @@
  * -----------------------------------------------------------------------
  */
 
+import { isNativeApp } from './platform.js';
+
+// The Android app runs the same code; only where the data lives is worded
+// differently ("this browser" vs "the app"). Everything else is shared.
+const IN_APP = isNativeApp();
+
 export const GUIDE_INTRO =
-  'WorkRoaster is a personal ledger for the work you do and what it pays. Log shifts across one or more jobs — hourly, paid per task, or on a monthly or yearly salary — let it work out your pay (or your real hourly rate), and see everything organised by pay cycle — all stored in this browser, on this device.';
+  `WorkRoaster is a personal ledger for the work you do and what it pays. Log shifts across one or more jobs — hourly, paid per task, or on a monthly or yearly salary — let it work out your pay (or your real hourly rate), and see everything organised by pay cycle — all stored ${IN_APP ? 'in the app' : 'in this browser'}, on this device.`;
 
 export const GUIDE_SECTIONS = [
   {
@@ -409,19 +415,25 @@ export const GUIDE_SECTIONS = [
     summary: 'Where your data is kept, and how to keep it safe.',
     topics: [
       {
-        title: 'Stored in this browser only',
-        keywords: 'privacy storage local browser device account cloud server',
-        body: `<p>Your records, jobs and settings are saved in this browser's local storage on this device. There's no account, no server and no cloud sync — nothing is uploaded, and another browser or device won't see your data. WorkRoaster doesn't encrypt it; it's as private as this browser profile.</p>`,
+        title: IN_APP ? 'Stored on this device only' : 'Stored in this browser only',
+        keywords: 'privacy storage local browser device account cloud server app internet backup',
+        body: IN_APP
+          ? `<p>Your records, jobs and settings are saved in WorkRoaster's private storage on this device. There's no account, no server and no cloud sync — nothing is uploaded. The app has no internet access at all, and its data isn't included in Android's cloud backup. WorkRoaster doesn't encrypt it; it's as private as your phone's screen lock.</p>`
+          : `<p>Your records, jobs and settings are saved in this browser's local storage on this device. There's no account, no server and no cloud sync — nothing is uploaded, and another browser or device won't see your data. WorkRoaster doesn't encrypt it; it's as private as this browser profile.</p>`,
       },
       {
         title: 'Working without a connection',
         keywords: 'offline internet connection',
-        body: `<p>Once the page is open, recording, calculating, exporting and this Guide all run in your browser without needing the internet.</p>`,
+        body: IN_APP
+          ? `<p>Recording, calculating, exporting and this Guide all work offline — the app never needs the internet.</p>`
+          : `<p>Once the page is open, recording, calculating, exporting and this Guide all run in your browser without needing the internet.</p>`,
       },
       {
         title: 'Backups matter',
-        keywords: 'clear browser data lost records backup regularly',
-        body: `<p>Clearing this site's data in your browser, or using a private window, <strong>deletes your records</strong>. Download a JSON backup now and then (Backup &amp; export) — it's also how you move your data to another device. <em>Clear all records</em> permanently erases every record on this device.</p>`,
+        keywords: 'clear browser data lost records backup regularly uninstall new phone',
+        body: IN_APP
+          ? `<p>Uninstalling WorkRoaster, or clearing its storage in Android settings, <strong>deletes your records</strong>. Save a JSON backup now and then (Backup &amp; export) and keep it somewhere safe, like Drive — it's also how you move your data to a new phone. <em>Clear all records</em> permanently erases every record on this device.</p>`
+          : `<p>Clearing this site's data in your browser, or using a private window, <strong>deletes your records</strong>. Download a JSON backup now and then (Backup &amp; export) — it's also how you move your data to another device. <em>Clear all records</em> permanently erases every record on this device.</p>`,
       },
       {
         title: 'Changes never rewrite history without asking',
@@ -433,7 +445,7 @@ export const GUIDE_SECTIONS = [
         title: 'Profiles: separate workspaces',
         keywords: 'profile profiles workspace side job side hustle switch separate rename delete',
         body: `<p>A <strong>profile</strong> is a separate set of records, jobs and settings (including the pay cycle) on this device — for example your main job with a Monday–Sunday cycle and a side hustle paid Tuesday–Monday. Add one in <strong>Settings → Profiles</strong>; once there are two, a <strong>Profile</strong> switcher appears at the top of the page. The theme is shared.</p>
-          <p>The records you already had are the first profile, <em>My profile</em>. It can be renamed but not deleted. Deleting any other profile asks first and permanently erases its records, jobs and settings, so download a backup before you do. A profile isn't a login: anyone using this browser can switch between them.</p>`,
+          <p>The records you already had are the first profile, <em>My profile</em>. It can be renamed but not deleted. Deleting any other profile asks first and permanently erases its records, jobs and settings, so download a backup before you do. A profile isn't a login: anyone using ${IN_APP ? 'this phone' : 'this browser'} can switch between them.</p>`,
       },
       {
         title: 'Appearance: themes, top bar and motion',

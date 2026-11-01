@@ -13,6 +13,14 @@
  * profile's settings.
  */
 (function () {
+  // Inside the Android app (Capacitor defines window.Capacitor before any
+  // page script), mark <html> so styles.css can apply the app-only layout
+  // rules from the very first frame.
+  try {
+    if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+      document.documentElement.classList.add('is-native');
+    }
+  } catch (e) { /* the website: nothing to do */ }
   try {
     var SETTINGS = 'modern_work_hours_tracker_v1_settings';
     var PROFILES = 'modern_work_hours_tracker_v1_profiles';
