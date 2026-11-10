@@ -7,6 +7,10 @@ fortnight all having with multiple profile for different paycycle.
 > Simple personal work tracker + earnings dashboard. Not enterprise HR
 > software, not payroll software, not an accounting tool. A complete guide section has also been added for better understanding of every feature that is currently available.
 
+> **Contributors and AI agents (Codex, Claude Code):** start with
+> [`AGENTS.md`](AGENTS.md) — project rules, architecture and current status —
+> and record every change in [`docs/updates/`](docs/updates/).
+
 ## Features
 
 - **Add a shift in seconds** — date, start time, working hours & minutes,
