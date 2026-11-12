@@ -129,4 +129,7 @@ first**, uninstall the debug app, then install from Play and restore.
 - [ ] Light, dark and each colour theme: status-bar icons stay readable; nothing hides under the status bar or gesture bar (phone and, if possible, tablet).
 - [ ] Rotate the phone; large system font size.
 - [ ] Privacy/Terms links open the browser; Send feedback opens the email app.
-- [ ] Settings → Apps → WorkRoaster → Permissions shows **no permissions**.
+- [ ] Tapping the date or a time field opens WorkRoaster's own picker (not Android's). Settings' "pay cycle started on" date opens Android's picker in WorkRoaster colours.
+- [ ] Clock in → Android asks once for notifications → clock out fills the form. To test the reminder, clock in, then set the phone clock 12 hours ahead (or wait): the notification appears with the app closed.
+- [ ] Settings → Tax estimate: turn on, try a few countries; amounts appear on the current cycle and in history.
+- [ ] Settings → Apps → WorkRoaster → Permissions shows **only Notifications**.

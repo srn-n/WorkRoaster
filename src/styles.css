@@ -3175,3 +3175,40 @@ input[type="date"], input[type="time"] { accent-color: var(--accent); }
 @media (max-width: 380px) {
   .boot-words span { white-space: nowrap; }
 }
+
+/* Settings → Currency: the "other code" and "custom" sub-fields are shown
+   only for their choice (author display rules would otherwise beat [hidden]). */
+#s-currency-other-field[hidden], #s-currency-custom-field[hidden] { display: none; }
+#s-currency-custom-field > .field-help { grid-column: 1 / -1; }
+
+/* Tax estimate (Settings → Tax estimate; hero and cycle list) */
+.hero-tax { display: block; margin-top: 4px; font-size: 0.82rem; color: var(--text-secondary); }
+.cycle-net { display: block; font-size: 0.74rem; color: var(--text-secondary); font-weight: 500; }
+.tax-warning { color: var(--warning, var(--text-secondary)); }
+.tax-explainer { margin-top: 8px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-inset); border: 1px solid var(--border); }
+.tax-explainer-title { margin: 0 0 6px; font-size: 0.95rem; }
+.tax-explainer-points { margin: 0 0 10px; padding-left: 18px; font-size: 0.84rem; color: var(--text-secondary); }
+.tax-explainer-points li + li { margin-top: 3px; }
+.tax-bands { width: 100%; border-collapse: collapse; font-size: 0.84rem; margin-bottom: 8px; }
+.tax-bands th, .tax-bands td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--border); }
+.tax-bands td:last-child, .tax-bands th:last-child { text-align: right; }
+.tax-explainer .field-help a { overflow-wrap: anywhere; }
+
+/* Live clock-in bar (above the current-cycle card) */
+.clock-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; margin-bottom: 12px; border-radius: var(--radius-md, 14px);
+  background: var(--surface, var(--surface-inset)); border: 1px solid var(--border);
+  font-size: 0.9rem; color: var(--text-secondary);
+}
+.clock-bar-text { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.clock-bar-actions { display: inline-flex; gap: 6px; }
+.clock-bar.is-running { color: var(--text-primary); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.clock-bar.is-overdue { border-color: #c2410c; background: color-mix(in srgb, #c2410c 10%, var(--surface, transparent)); }
+.clock-pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; animation: clock-pulse 1.6s ease-in-out infinite; }
+.clock-bar.is-overdue .clock-pulse { background: #c2410c; }
+@keyframes clock-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.8); } }
+@media (prefers-reduced-motion: reduce) { .clock-pulse { animation: none; } }
+
+/* Android app: date/time fields open WorkRoaster's own picker on tap. */
+input.is-tap-to-open { cursor: pointer; caret-color: transparent; }

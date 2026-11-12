@@ -11,6 +11,10 @@
         starts when setting up a new phone; nothing passes through a server.)
       - No storage permission: files are saved through Android's own
         "Save as" dialog, to the folder the person chooses.
+      - The only permissions are for the local "still clocked in?" reminder
+        (from @capacitor/local-notifications): POST_NOTIFICATIONS (Android
+        asks the person), RECEIVE_BOOT_COMPLETED (keeps the reminder after a
+        restart) and WAKE_LOCK. Nothing is sent anywhere.
       - taskAffinity="": another app can't slip its own screen into
         WorkRoaster's task to pose as it (task hijacking / StrandHogg).
     -->
@@ -49,4 +53,8 @@
     <!-- Strip INTERNET even if a future library's manifest asks for it. The
          build workflow also checks the finished APK for it. -->
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <!-- The 12-hour clock-in reminder needs no exact timing, and Google Play
+         restricts exact alarms to alarm/calendar apps: removed. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" tools:node="remove" />
 </manifest>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- WorkRoaster colours for Android's own dialogs (date/time pickers,
+         confirmations, menus), light theme. Match src/styles.css. -->
+    <color name="wr_accent">#9A682B</color>
+    <color name="wr_dialog_background">#FFFDF9</color>
+    <color name="wr_text_primary">#17181A</color>
+    <color name="wr_text_secondary">#5B5E63</color>
+</resources>

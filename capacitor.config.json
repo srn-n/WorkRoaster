@@ -9,6 +9,10 @@
     "SystemBars": {
       "insetsHandling": "css",
       "style": "DEFAULT"
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_workroaster",
+      "iconColor": "#9A682B"
     }
   }
 }

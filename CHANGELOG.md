@@ -2,6 +2,16 @@
 
 All notable changes to WorkRoaster are listed here.
 
+## Unreleased — 2026-11-12
+
+- **Currency menu:** pick a major currency by name (AUD default), any other ISO code, or your own symbol and name. Labels only; nothing is converted.
+- **Tax estimate (optional, off by default):** estimated tax and after-tax pay per pay cycle for Australia, the USA, the UK, South Korea, Japan, Malaysia and Bangladesh.
+  - Uses current-year rates.
+  - Settings explains each country's system, what's included and the official sources.
+- **Live clock-in:** a running timer per profile. Clock out fills the record form for you to check and save. A reminder comes if you're still clocked in after 12 hours: a phone notification in the app, or a browser notification on the website while it's open.
+- **Android app:** date and time fields open WorkRoaster's own pickers. Android's own dialogs (confirmations, menus) use WorkRoaster's colours in light and dark.
+- **Guide:** new *Currency & tax* section, plus topics for clocking in, quick notes, feedback/version, and Save as in the app.
+
 ## 0.0.1 — 2026-11-02 (first Android release)
 
 Version numbers start here: `package.json` holds the one version for the

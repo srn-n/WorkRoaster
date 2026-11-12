@@ -197,6 +197,13 @@ export const GUIDE_SECTIONS = [
         body: `<p>Turn on <strong>Settings → Workflow → Calculate working time from ending time</strong> and the form asks for Start and End, working the duration out for you. With it off, you type the working time directly. Records keep whichever way they were entered.</p>`,
       },
       {
+        title: 'Clocking in live',
+        keywords: 'clock in clock out timer live start stop shift running reminder notification 12 hours',
+        body: `<p>Working now? Press <strong>Clock in</strong> above the current pay cycle. A timer runs (it keeps going if you reload or close ${IN_APP ? 'the app' : 'the page'}) and each profile has its own.</p>
+          <p>Press <strong>Clock out</strong> when you finish: the record form is filled in with the date, the start time and your working time (or end time). Check the job, break and pay, then save it as usual — nothing is recorded until you do. <em>Cancel</em> stops the timer without saving.</p>
+          <p>If you're still clocked in after <strong>12 hours</strong>, WorkRoaster reminds you: ${IN_APP ? 'a notification on your phone, even when the app is closed (Android asks once for permission to show it)' : 'a browser notification while WorkRoaster is open, if you allow it'}, and a warning above the pay cycle.</p>`,
+      },
+      {
         title: 'Breaks: gross vs working time',
         keywords: 'break unpaid break net paid time gross working minutes lunch',
         example: 'break',
@@ -260,6 +267,26 @@ export const GUIDE_SECTIONS = [
         title: 'Changing a weekend rate for one shift',
         keywords: 'override weekend adjustment custom one off',
         body: `<p>With a job selected, the form's <strong>Rate</strong> section offers <em>Use job default</em>, <em>No adjustment</em> or <em>Custom</em> for that one record's weekend adjustment. It doesn't change the job.</p>`,
+      },
+    ],
+  },
+  {
+    id: 'money',
+    label: 'Currency & tax',
+    summary: 'Choose how amounts are labelled, and see an optional after-tax estimate.',
+    topics: [
+      {
+        title: 'Choosing your currency',
+        keywords: 'currency aud usd gbp eur jpy krw myr bdt custom symbol name label money',
+        body: `<p><strong>Settings → General → Currency</strong> sets how every amount is labelled — on screen and in exports. Pick one of the major currencies (Australian dollar is the default), <em>Other currency code…</em> for any 3-letter ISO code, or <em>Custom</em> to use your own symbol and name (for example <em>Tk</em> or <em>pts</em>).</p>
+          <p>Nothing is converted: amounts stay exactly as you entered them. Enter pay and rates in the currency you choose.</p>`,
+      },
+      {
+        title: 'Estimated tax and after-tax pay',
+        keywords: 'tax estimate after tax take home net income tax australia usa united states uk korea japan malaysia bangladesh medicare national insurance fica',
+        body: `<p>Turn on <strong>Settings → Tax estimate</strong> to see an estimated tax and after-tax amount for each pay cycle — on the current-cycle card and in Pay-cycle history. It's off by default and never changes what you've recorded.</p>
+          <p>Choose a country: <strong>Australia, United States, United Kingdom, South Korea, Japan, Malaysia or Bangladesh</strong>. The tab explains how that country taxes pay this year, shows its rates, what is and isn't included (for example Medicare levy, National Insurance or resident tax), and links to the official sources.</p>
+          <p>How it works: a cycle's pay is turned into a yearly figure, taxed at the yearly rates, then divided back — the way employers estimate withholding. It's an estimate for a resident employee with no other income or deductions, <strong>not tax advice</strong>; your payslip and tax return are what count.</p>`,
       },
     ],
   },
@@ -392,6 +419,7 @@ export const GUIDE_SECTIONS = [
             <li>Each job group inside a cycle has its own buttons for <strong>just that job's records</strong> in that cycle.</li>
           </ul>
           <p>Reports lead with <strong>Total pay</strong>, then working time, average rate and record count, followed by a table: date, day, <strong>Active hour</strong> (e.g. 8:00 AM – 12:30 PM, or “From 9:00 AM” when only a duration was entered), duration, break, day and payment type, mode (<em>Hourly</em>, <em>Actual</em>, <em>Monthly</em> or <em>Yearly</em>), pay, rate per hour and — when any record has them — notes, with a closing total row. For a salaried record, pay is the day's salary share and the rate is its effective hourly rate; reports that contain salaried shifts also show a <strong>Base salary</strong> line (e.g. “Base salary — Office Administrator: A$4,840.00 / month”). Each carries a small credit line: <em>WorkRoaster · Simply Made Studio</em>.</p>
+          ${IN_APP ? '<p>In the app, each file opens Android’s <strong>Save as</strong> window so you choose where it goes — Downloads, Drive or any folder. Cancelling saves nothing.</p>' : ''}
           <p>Before each PDF, JPG or Excel file is made, an <strong>Export options</strong> window lets you choose what goes in it: <em>Base salary</em>, <em>Time</em> (start and end times), <em>Total hours worked</em> (durations, breaks and hours totals) and <em>Total amount</em> (every money figure — pay, rates, subtotals, totals, and base salary). Anything switched off is left out of the file completely. The choices start from <strong>Settings → General → Export</strong>; changing them in the window affects that one file only. JSON backups and CSV always include everything.</p>`,
       },
       {
@@ -446,6 +474,16 @@ export const GUIDE_SECTIONS = [
         keywords: 'profile profiles workspace side job side hustle switch separate rename delete',
         body: `<p>A <strong>profile</strong> is a separate set of records, jobs and settings (including the pay cycle) on this device — for example your main job with a Monday–Sunday cycle and a side hustle paid Tuesday–Monday. Add one in <strong>Settings → Profiles</strong>; once there are two, a <strong>Profile</strong> switcher appears at the top of the page. The theme is shared.</p>
           <p>The records you already had are the first profile, <em>My profile</em>. It can be renamed but not deleted. Deleting any other profile asks first and permanently erases its records, jobs and settings, so ${IN_APP ? 'save' : 'download'} a backup before you do. A profile isn't a login: anyone using ${IN_APP ? 'this phone' : 'this browser'} can switch between them.</p>`,
+      },
+      {
+        title: 'Quick notes',
+        keywords: 'notes quick note reminder todo checklist done edit delete',
+        body: `<p><strong>Notes</strong> (top bar) is a simple list for reminders — things to claim, a roster to check, a question for your manager. Add a note, tick it when it's done, edit or delete it. Notes belong to the open profile and are included in its backup.</p>`,
+      },
+      {
+        title: 'Feedback, version and privacy',
+        keywords: 'feedback email bug report suggestion version privacy terms contact',
+        body: `<p><strong>Settings → Feedback</strong> writes an email to Simply Made Studio in ${IN_APP ? 'your email app' : 'your email app or webmail'} — nothing is sent until you press Send there. You can add ${IN_APP ? 'device' : 'browser'} and screen details to help with layout bugs. <strong>Settings → Privacy &amp; terms</strong> shows the version you're using and links to the full privacy policy and terms.</p>`,
       },
       {
         title: 'Appearance: themes, top bar and motion',

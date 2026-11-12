@@ -5,6 +5,7 @@
  */
 import { registerPlugin, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { App } from '@capacitor/app';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 // App-local plugin (android/.../SaveFilePlugin.java): Android's own
 // "Save as" dialog, so the person picks the folder (or Drive) themselves.
@@ -43,4 +44,47 @@ export function leaveApp() {
 /** Status / navigation bar icons: light icons on a dark page, dark on light. */
 export function setBarsForDarkPage(isDark) {
   SystemBars.setStyle({ style: isDark ? SystemBarsStyle.Dark : SystemBarsStyle.Light }).catch(() => {});
+}
+
+// "Still clocked in?" reminder. A local notification scheduled on the phone
+// itself (no server, no internet): Android shows it at the given time even
+// when the app is closed, and restores it after a restart.
+const CLOCK_REMINDER_ID = 1201;
+
+/** Ask for the notifications permission (Android 13+ asks the person once). */
+export async function ensureNotificationPermission() {
+  try {
+    const current = await LocalNotifications.checkPermissions();
+    if (current.display === 'granted') return true;
+    const asked = await LocalNotifications.requestPermissions();
+    return asked.display === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+export async function scheduleClockReminder(atMs) {
+  try {
+    await LocalNotifications.cancel({ notifications: [{ id: CLOCK_REMINDER_ID }] });
+    if (!(await ensureNotificationPermission())) return false;
+    await LocalNotifications.schedule({
+      notifications: [{
+        id: CLOCK_REMINDER_ID,
+        title: 'Still clocked in?',
+        body: "You've been clocked in for 12 hours. Open WorkRoaster to clock out.",
+        schedule: { at: new Date(atMs), allowWhileIdle: true },
+      }],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function cancelClockReminder() {
+  try {
+    await LocalNotifications.cancel({ notifications: [{ id: CLOCK_REMINDER_ID }] });
+  } catch {
+    /* nothing scheduled */
+  }
 }

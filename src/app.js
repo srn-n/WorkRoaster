@@ -16,8 +16,9 @@ import * as jobs from './jobs.js';
 import { buildFeedbackEmail, feedbackDeviceSummary, FEEDBACK_EMAIL, FEEDBACK_MAX_LENGTH } from './feedback.js';
 import { GUIDE_INTRO, GUIDE_SECTIONS } from './guide.js';
 import { renderCalculator, wireCalculator } from './calculator.js';
-import { isSupportedCurrency, normalizeCurrencyInput } from './currency.js';
+import { isSupportedCurrency, normalizeCurrencyInput, normalizeCustomCurrency, MAJOR_CURRENCIES, currencyName } from './currency.js';
 import { isNativeApp } from './platform.js';
+import { TAX_COUNTRIES, taxCountry, cycleTaxEstimate, normalizeTaxSettings, cyclesPerYear } from './tax.js';
 // export.js pulls in jsPDF (which itself bundles html2canvas/DOMPurify)
 // and ExcelJS — a few hundred KB the core tracker doesn't need just to
 // add a record. Loaded lazily, on first export click, so page load stays
@@ -111,8 +112,11 @@ const cycleExpansion = new Map();
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const money = (amount) => calc.formatMoney(amount, state.settings.currency);
-const rate = (pay, minutes) => calc.formatRate(pay, minutes, state.settings.currency);
+/** What amounts are labelled with: the person's own symbol when they set a
+ *  custom currency, otherwise the ISO code. Labels only — nothing is converted. */
+const displayCurrency = () => state.settings.customCurrency || state.settings.currency;
+const money = (amount) => calc.formatMoney(amount, displayCurrency());
+const rate = (pay, minutes) => calc.formatRate(pay, minutes, displayCurrency());
 
 // ---------------------------------------------------------------------
 // Icon system — one consistent set of hand-authored, stroke-based
@@ -812,6 +816,10 @@ function renderStats(cycles) {
           <div class="hero-metric-primary">
             <span class="hero-metric-value tnum">${money(focused.totalPay)}</span>
             <span class="hero-metric-label">Earned this cycle</span>
+            ${(() => {
+              const t = cycleTax(focused.totalPay);
+              return t ? `<span class="hero-tax tnum" title="Estimate — see Settings → Tax estimate">Est. tax ${money(t.tax)} · after tax ${money(t.net)}</span>` : '';
+            })()}
           </div>
           <div class="hero-metric-secondary">
             <span class="hero-metric-value-sm tnum">${calc.formatDuration(focused.totalMinutes)}</span>
@@ -831,6 +839,7 @@ function renderStats(cycles) {
 
   return `
     <section class="dashboard" aria-label="Pay cycle summary">
+      ${renderClockBar()}
       <div class="period-card">${heroInner}</div>
       <div class="stats-band" aria-label="Overall totals">
         <div class="stat-metric"><span class="stat-metric-value tnum">${calc.formatDuration(overallMinutes)}</span><span class="stat-metric-label">Total hours</span></div>
@@ -1427,8 +1436,8 @@ function renderRatePanelBody(job, b, payMode = 'hourlyRate') {
     <div class="rate-live-panel">
       <div class="rate-live-row"><span class="rate-live-label">Job</span><span class="rate-live-value">${esc(job.name)}</span></div>
       <div class="rate-live-row"><span class="rate-live-label">Base rate</span><span class="rate-live-value tnum">${money(job.baseRate)}/hr</span></div>
-      <div class="rate-live-row is-adjustment"><span class="rate-live-label">${esc(b ? weekendSourceLabel(b.weekendSource) : 'Weekend')}</span><span class="rate-live-value tnum">${b ? esc(calc.formatRuleLabel(b.weekendRule, state.settings.currency)) : '—'}</span></div>
-      <div class="rate-live-row is-adjustment"><span class="rate-live-label">Additional</span><span class="rate-live-value tnum">${b ? esc(calc.formatRuleLabel(b.additionalRule, state.settings.currency)) : '—'}</span></div>
+      <div class="rate-live-row is-adjustment"><span class="rate-live-label">${esc(b ? weekendSourceLabel(b.weekendSource) : 'Weekend')}</span><span class="rate-live-value tnum">${b ? esc(calc.formatRuleLabel(b.weekendRule, displayCurrency())) : '—'}</span></div>
+      <div class="rate-live-row is-adjustment"><span class="rate-live-label">Additional</span><span class="rate-live-value tnum">${b ? esc(calc.formatRuleLabel(b.additionalRule, displayCurrency())) : '—'}</span></div>
       <div class="rate-live-row is-effective"><span class="rate-live-label">Effective rate</span><span class="rate-live-value tnum">${b ? `${money(b.effectiveRate)}/hr` : '—'}</span></div>
       <div class="rate-live-row"><span class="rate-live-label">Working time</span><span class="rate-live-value tnum">${b ? calc.formatDuration(b.minutes) : '—'}</span></div>
       <div class="rate-live-row is-total"><span class="rate-live-label">${payMode === 'hourlyRate' ? 'Calculated payment' : 'Expected payment'}</span><span class="rate-live-value tnum">${b ? money(b.payment) : '—'}</span></div>
@@ -1803,10 +1812,10 @@ function recordRateBreakdownLine(r, mins) {
   if (r.baseRateAtEntry === undefined || r.baseRateAtEntry === null) return null;
   const segments = [`${money(r.baseRateAtEntry)} base`];
   if (r.weekendRuleAtEntry && r.weekendRuleAtEntry.type !== 'none') {
-    segments.push(esc(calc.formatRuleLabel(r.weekendRuleAtEntry, state.settings.currency)));
+    segments.push(esc(calc.formatRuleLabel(r.weekendRuleAtEntry, displayCurrency())));
   }
   if (r.additionalRuleAtEntry && r.additionalRuleAtEntry.type !== 'none') {
-    segments.push(`${esc(calc.formatRuleLabel(r.additionalRuleAtEntry, state.settings.currency))} additional`);
+    segments.push(`${esc(calc.formatRuleLabel(r.additionalRuleAtEntry, displayCurrency()))} additional`);
   }
   const effective = r.effectiveRateAtEntry !== undefined ? r.effectiveRateAtEntry : r.baseRateAtEntry;
   if (calc.recordPayMode(r) === 'payment') {
@@ -2006,6 +2015,10 @@ function renderRecords(cycles) {
               <span class="cycle-metrics">
                 <span class="cycle-summary tnum"><span class="cycle-metric" data-metric="hours">${calc.formatDuration(c.totalMinutes)}</span> · <span class="cycle-metric" data-metric="shifts">${shifts} shift${shifts === 1 ? '' : 's'}</span> · <span class="cycle-metric" data-metric="jobs">${esc(jobCountLabel(jobCount))}</span></span>
                 <span class="cycle-pay tnum" data-metric="pay">${money(c.totalPay)}</span>
+                ${(() => {
+                  const t = cycleTax(c.totalPay);
+                  return t ? `<span class="cycle-net tnum" data-metric="net">≈ ${money(t.net)} after tax</span>` : '';
+                })()}
               </span>
             </button>
             <div class="cycle-head-actions">
@@ -2286,7 +2299,7 @@ function addProfile(name) {
     // Make sure the current profile is saved under its own keys first.
     if (!persist()) return;
     if (!hasProfiles()) store.saveProfiles({ ...profileIndex(), ...store.appearanceOf(state.settings) });
-    const profile = store.createProfile(clean, { ...store.appearanceOf(state.settings), currency: state.settings.currency });
+    const profile = store.createProfile(clean, { ...store.appearanceOf(state.settings), currency: state.settings.currency, customCurrency: state.settings.customCurrency });
     switchProfile(profile.id);
     showToast(`Added ${profile.name} and switched to it. Set up its jobs and pay cycle in Settings.`);
   } catch {
@@ -2300,6 +2313,7 @@ const SETTINGS_CATEGORIES = [
   { id: 'workflow', label: 'Workflow' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'options', label: 'Options' },
+  { id: 'tax', label: 'Tax estimate' },
   { id: 'profiles', label: 'Profiles' },
   { id: 'feedback', label: 'Feedback' },
   { id: 'legal', label: 'Privacy & terms' },
@@ -2314,6 +2328,239 @@ const LEGAL_LINKS = {
   // One public contact address for the whole app (the same one Feedback uses).
   contact: FEEDBACK_EMAIL,
 };
+
+// -- Live clock-in ----------------------------------------------------------
+// "Clock in" starts a timer for a shift (saved per profile, so it survives a
+// reload or closing the app). "Clock out" fills the record form with the
+// date, start and working time (or end time) for the person to check and
+// save — nothing is recorded behind their back. After 12 hours a reminder
+// fires: a local notification in the Android app (even when closed), a
+// browser notification on the website while it's open, and a warning here.
+
+const CLOCK_REMINDER_MS = 12 * 60 * 60 * 1000;
+let clockTicker = null;
+let clockAlertTimer = null;
+let clockAlertFor = null;
+
+const clockMinutes = (clock, now = Date.now()) => Math.max(0, Math.floor((now - clock.startedAt) / 60000));
+const ymdLocal = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const hhmmLocal = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+
+function renderClockBar() {
+  const clock = store.loadClock();
+  if (!clock) {
+    return `
+      <div class="clock-bar" data-clock-state="idle">
+        <span class="clock-bar-text">${icon('clock', 'icon-sm')}<span>Working now? Start a live timer.</span></span>
+        <button class="btn secondary small" id="btn-clock-in" type="button">${icon('clock', 'icon-sm')}Clock in</button>
+      </div>`;
+  }
+  const started = new Date(clock.startedAt);
+  const sameDay = ymdLocal(started) === calc.todayString();
+  const when = `${started.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}${sameDay ? '' : ` on ${started.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}`}`;
+  const overdue = Date.now() - clock.startedAt >= CLOCK_REMINDER_MS;
+  return `
+      <div class="clock-bar is-running ${overdue ? 'is-overdue' : ''}" data-clock-state="running" role="status">
+        <span class="clock-bar-text">
+          <span class="clock-pulse" aria-hidden="true"></span>
+          <span>${overdue ? '<strong>Still clocked in after 12+ hours.</strong> Forgot to clock out? ' : ''}Clocked in at ${esc(when)} · <b class="tnum" data-clock-elapsed>${esc(calc.formatDuration(clockMinutes(clock)))}</b></span>
+        </span>
+        <span class="clock-bar-actions">
+          <button class="btn primary small" id="btn-clock-out" type="button">Clock out</button>
+          <button class="btn secondary small" id="btn-clock-cancel" type="button" aria-label="Cancel this clock-in without saving">Cancel</button>
+        </span>
+      </div>`;
+}
+
+/** After each render: keep the elapsed time ticking and the 12-hour alert set. */
+function syncClockTimers() {
+  const clock = store.loadClock();
+  if (!clock) {
+    clearInterval(clockTicker);
+    clockTicker = null;
+    clearTimeout(clockAlertTimer);
+    clockAlertTimer = null;
+    clockAlertFor = null;
+    return;
+  }
+  if (!clockTicker) {
+    clockTicker = setInterval(() => {
+      const c = store.loadClock();
+      const el = document.querySelector('[data-clock-elapsed]');
+      if (!c || !el) return;
+      el.textContent = calc.formatDuration(clockMinutes(c));
+    }, 30000);
+  }
+  const due = clock.startedAt + CLOCK_REMINDER_MS;
+  if (clockAlertFor !== due && due > Date.now()) {
+    clearTimeout(clockAlertTimer);
+    clockAlertFor = due;
+    // setTimeout can't wait longer than ~24.8 days; a clock-in is at most 12h away here.
+    clockAlertTimer = setTimeout(() => {
+      clockAlertTimer = null;
+      if (!isNativeApp() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try {
+          new Notification('Still clocked in?', { body: "You've been clocked in for 12 hours. Open WorkRoaster to clock out.", icon: '/icon-192.png' });
+        } catch {
+          /* some browsers only allow notifications from a service worker */
+        }
+      }
+      render();
+    }, due - Date.now());
+  }
+}
+
+function clockIn() {
+  if (store.loadClock()) return;
+  const startedAt = Date.now();
+  if (!store.saveClock({ startedAt })) {
+    showToast(PERSIST_FAILED_MESSAGE, 'error');
+    return;
+  }
+  if (isNativeApp()) {
+    nativeModule?.scheduleClockReminder(startedAt + CLOCK_REMINDER_MS);
+  } else if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+    Notification.requestPermission().catch(() => {});
+  }
+  render();
+  showToast('Clocked in. You’ll get a reminder if you’re still clocked in after 12 hours.');
+}
+
+function clearClock() {
+  store.saveClock(null);
+  if (isNativeApp()) nativeModule?.cancelClockReminder();
+}
+
+function clockOut() {
+  const clock = store.loadClock();
+  if (!clock) return;
+  const end = new Date();
+  const minutes = Math.max(1, clockMinutes(clock, end.getTime()));
+  clearClock();
+  if (state.editingId) state.editingId = null; // clocking out always starts a new record
+  if (state.view !== 'home') navigateTo('home');
+  render();
+  const set = (id, value) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = String(value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const start = new Date(clock.startedAt);
+  set('f-date', ymdLocal(start));
+  set('f-start', hhmmLocal(start));
+  if (document.getElementById('f-end') && minutes < 24 * 60) {
+    set('f-end', hhmmLocal(end));
+  } else {
+    set('f-hours', Math.floor(minutes / 60));
+    set('f-minutes', minutes % 60);
+  }
+  document.getElementById('form-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  showToast(`Clocked out after ${calc.formatDuration(minutes)}. Check the details below, then save the record.`);
+}
+
+function wireClock() {
+  document.getElementById('btn-clock-in')?.addEventListener('click', clockIn);
+  document.getElementById('btn-clock-out')?.addEventListener('click', clockOut);
+  document.getElementById('btn-clock-cancel')?.addEventListener('click', () => {
+    if (!confirm('Cancel this clock-in? The running time won’t be saved.')) return;
+    clearClock();
+    render();
+  });
+}
+
+// -- Android app: WorkRoaster's own date/time pickers ----------------------
+// In the Android WebView a tap anywhere on <input type="date|time"> opens
+// Android's system picker. Where WorkRoaster has its own themed picker for
+// that field, the field becomes tap-to-open (read-only, so the system
+// dialog never appears) and the tap opens the themed picker instead. The
+// value is still written to the real input, exactly as on the website.
+// Fields without a themed picker keep the system dialog, which is styled
+// with WorkRoaster's colours in android/app/src/main/res/values/styles.xml.
+function useThemedPickersInApp() {
+  document.querySelectorAll('input[type="date"], input[type="time"]').forEach((input) => {
+    if (input.dataset.themedPicker) return;
+    const trigger = input.type === 'date'
+      ? (input.id === 'f-date' ? document.getElementById('btn-date-picker') : null)
+      : document.getElementById(`btn-${input.id}-time`);
+    if (!trigger) return;
+    input.dataset.themedPicker = '1';
+    input.readOnly = true;
+    input.setAttribute('inputmode', 'none');
+    input.classList.add('is-tap-to-open');
+    input.addEventListener('click', (e) => {
+      e.preventDefault();
+      // Don't let this tap also count as an "outside click" that would close
+      // the picker it is about to open.
+      e.stopPropagation();
+      trigger.click();
+    });
+  });
+}
+
+// -- Tax estimate tab -------------------------------------------------------
+// Optional and off by default. Estimates only — see tax.js for the method,
+// the figures and their sources. Nothing leaves the device.
+
+/** The estimate for one pay cycle's pay, or null when the estimate is off. */
+function cycleTax(pay) {
+  return cycleTaxEstimate(pay, state.settings.payCycleLengthDays, state.settings.tax);
+}
+
+function taxTab() {
+  const t = normalizeTaxSettings(state.settings.tax);
+  const c = taxCountry(t.country);
+  const currencyNote = state.settings.customCurrency || state.settings.currency === c.currency
+    ? ''
+    : `<p class="field-help tax-warning" role="note">Your amounts are in ${esc(state.settings.currency)}, but ${esc(c.name)} rates are in ${esc(c.currency)}. The estimate treats your amounts as ${esc(c.currency)} — no conversion is made.</p>`;
+  const optionFields = c.options
+    .map((o) =>
+      o.type === 'toggle'
+        ? `
+    <div class="field">
+      <label class="checkbox-field" for="s-tax-opt-${o.id}">
+        <input type="checkbox" id="s-tax-opt-${o.id}" data-tax-option="${o.id}" ${t.options[o.id] ? 'checked' : ''}>
+        <span>${esc(o.label)}</span>
+      </label>
+    </div>`
+        : `
+    <div class="field">
+      <label for="btn-s-tax-opt-${o.id}-picker">${esc(o.label)}</label>
+      ${themedSelect(`s-tax-opt-${o.id}`, o.choices, t.options[o.id], o.label.toLowerCase())}
+    </div>`
+    )
+    .join('');
+  const example = cycleTaxEstimate(1000 * (c.currency === 'KRW' || c.currency === 'JPY' ? 300 : c.currency === 'BDT' ? 100 : 1), state.settings.payCycleLengthDays, { ...t, enabled: true });
+  return `
+    <div class="field">
+      <label class="checkbox-field" for="s-tax-enabled">
+        <input type="checkbox" id="s-tax-enabled" ${t.enabled ? 'checked' : ''} aria-describedby="s-tax-help">
+        <span>Show estimated tax and after-tax pay</span>
+      </label>
+      <small class="field-help" id="s-tax-help">Adds an estimate to each pay cycle. Your recorded pay is never changed. Off by default.</small>
+    </div>
+    <div class="field">
+      <label for="btn-s-tax-country-picker">Country</label>
+      ${themedSelect('s-tax-country', TAX_COUNTRIES.map((x) => ({ value: x.id, label: x.name })), t.country, 'country')}
+      <small class="field-help">${esc(c.year)}</small>
+    </div>
+    ${optionFields}
+    ${currencyNote}
+    <section class="tax-explainer" aria-labelledby="tax-explainer-title">
+      <h3 id="tax-explainer-title" class="tax-explainer-title">How ${esc(c.name)} taxes pay</h3>
+      <ul class="tax-explainer-points">${c.explain.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>
+      <table class="tax-bands">
+        <caption class="visually-hidden">${esc(c.name)} tax rates, ${esc(c.year)}</caption>
+        <thead><tr><th scope="col">Taxable income</th><th scope="col">Rate</th></tr></thead>
+        <tbody>${c.bands.map(([band, rate]) => `<tr><td>${esc(band)}</td><td class="tnum">${esc(rate)}</td></tr>`).join('')}</tbody>
+      </table>
+      ${example ? `<p class="field-help">Example: ${esc(money(example.tax + example.net))} earned in a ${esc(String(state.settings.payCycleLengthDays))}-day cycle → about ${esc(money(example.tax))} tax (${esc((example.rate * 100).toFixed(1))}%), ${esc(money(example.net))} after tax.</p>` : ''}
+      <p class="field-help"><strong>Not included:</strong> ${esc(c.notes)}</p>
+      <p class="field-help">How it works: each cycle's pay is turned into a yearly figure (× ${esc(String(Math.round(cyclesPerYear(state.settings.payCycleLengthDays))))} cycles), taxed at the yearly rates, then divided back. It's an estimate, not tax advice — your payslip and tax return are what count.</p>
+      <p class="field-help">Sources (rates checked ${esc(c.checked)}): ${c.sources.map((src) => `<a href="${esc(src.url)}" target="_blank" rel="noopener">${esc(src.label)}</a>`).join(' · ')}</p>
+    </section>`;
+}
 
 function legalTab() {
   return `
@@ -2535,9 +2782,9 @@ function renderJobRow(job, records) {
       </div>
       <div class="job-row-badges">
         ${!job.active ? '<span class="tag muted-tag">Archived</span>' : ''}
-        ${job.saturdayRule.type !== 'none' ? `<span class="tag">Sat ${esc(calc.formatRuleLabel(job.saturdayRule, state.settings.currency))}</span>` : ''}
-        ${job.sundayRule.type !== 'none' ? `<span class="tag">Sun ${esc(calc.formatRuleLabel(job.sundayRule, state.settings.currency))}</span>` : ''}
-        ${job.additionalRule.type !== 'none' ? `<span class="tag">+ ${esc(calc.formatRuleLabel(job.additionalRule, state.settings.currency))}</span>` : ''}
+        ${job.saturdayRule.type !== 'none' ? `<span class="tag">Sat ${esc(calc.formatRuleLabel(job.saturdayRule, displayCurrency()))}</span>` : ''}
+        ${job.sundayRule.type !== 'none' ? `<span class="tag">Sun ${esc(calc.formatRuleLabel(job.sundayRule, displayCurrency()))}</span>` : ''}
+        ${job.additionalRule.type !== 'none' ? `<span class="tag">+ ${esc(calc.formatRuleLabel(job.additionalRule, displayCurrency()))}</span>` : ''}
       </div>
       ${
         editing
@@ -2652,6 +2899,25 @@ function cycleStartField() {
     </div>`;
 }
 
+/** Save the custom currency typed in Settings (symbol required). */
+function saveCustomCurrencyFromInputs({ redraw = true, force = false } = {}) {
+  const custom = normalizeCustomCurrency({
+    symbol: document.getElementById('s-currency-symbol')?.value,
+    name: document.getElementById('s-currency-name')?.value,
+  });
+  if (!custom) return; // no symbol yet: keep the current currency until one is typed
+  const prev = state.settings.customCurrency;
+  const same = prev && prev.symbol === custom.symbol && prev.name === custom.name;
+  if (!same) {
+    state.settings = { ...state.settings, customCurrency: custom };
+    persist();
+  }
+  if (!redraw || (same && !force)) return;
+  const activeId = document.activeElement?.id;
+  if (activeId) focusAfterRender = focusById(activeId);
+  render();
+}
+
 /** One Settings category's content pane — used by the full modal render
  *  and by navigateSettingsTab()'s in-place pane swap. */
 function settingsTabContent(tab) {
@@ -2660,15 +2926,42 @@ function settingsTabContent(tab) {
   const fieldLabel = field === 'dayTypes' ? 'Day types' : 'Payment types';
 
   const generalTab = `
+${(() => {
+      const custom = state.settings.customCurrency;
+      const code = state.settings.currency;
+      const choice = custom ? '__custom' : MAJOR_CURRENCIES.includes(code) ? code : '__other';
+      const choices = [
+        ...MAJOR_CURRENCIES.map((c) => ({ value: c, label: `${c} — ${currencyName(c)}` })),
+        { value: '__other', label: choice === '__other' ? `Other code (${code})…` : 'Other currency code…' },
+        { value: '__custom', label: custom ? `Custom (${custom.symbol}${custom.name ? ` — ${custom.name}` : ''})…` : 'Custom — your own symbol and name…' },
+      ];
+      return `
     <div class="field">
+      <label for="btn-s-currency-choice-picker">Currency</label>
+      ${themedSelect('s-currency-choice', choices, choice, 'currency')}
+      <small class="field-help" id="s-currency-choice-help">Labels your amounts only — nothing is converted. Enter pay and rates in this currency. Example: ${esc(money(1234.5))}</small>
+    </div>
+    <div class="field" id="s-currency-other-field" ${choice === '__other' ? '' : 'hidden'}>
       <label for="s-currency">Currency code</label>
-      <input id="s-currency" list="currency-list" value="${esc(state.settings.currency)}" maxlength="3" style="text-transform:uppercase" aria-describedby="s-currency-help s-currency-error" autocomplete="off" spellcheck="false">
+      <input id="s-currency" list="currency-list" value="${esc(code)}" maxlength="3" style="text-transform:uppercase" aria-describedby="s-currency-help s-currency-error" autocomplete="off" spellcheck="false">
       <datalist id="currency-list">
         ${['USD', 'AUD', 'NZD', 'GBP', 'EUR', 'CAD', 'SGD', 'INR'].map((c) => `<option value="${c}">`).join('')}
       </datalist>
       <small class="field-help" id="s-currency-help">Any valid 3-letter ISO currency code, e.g. AUD, USD, GBP.</small>
-      <small class="field-error" id="s-currency-error" role="alert">${isSupportedCurrency(state.settings.currency) ? '' : `Your saved code “${esc(state.settings.currency)}” isn’t a recognised currency. Amounts still show it until you choose a valid code.`}</small>
+      <small class="field-error" id="s-currency-error" role="alert">${isSupportedCurrency(code) ? '' : `Your saved code “${esc(code)}” isn’t a recognised currency. Amounts still show it until you choose a valid code.`}</small>
     </div>
+    <div class="field-row grid grid-2" id="s-currency-custom-field" ${choice === '__custom' ? '' : 'hidden'}>
+      <div class="field">
+        <label for="s-currency-symbol">Symbol</label>
+        <input id="s-currency-symbol" maxlength="6" value="${esc(custom?.symbol || '')}" placeholder="e.g. Tk" autocomplete="off" spellcheck="false" aria-describedby="s-currency-custom-help">
+      </div>
+      <div class="field">
+        <label for="s-currency-name">Name (optional)</label>
+        <input id="s-currency-name" maxlength="30" value="${esc(custom?.name || '')}" placeholder="e.g. Taka" autocomplete="off" aria-describedby="s-currency-custom-help">
+      </div>
+      <small class="field-help" id="s-currency-custom-help">Shown in front of every amount and in exports. Up to 6 characters; symbols like &lt; &gt; &amp; and quotes aren’t allowed.</small>
+    </div>`;
+    })()}
     <div class="field">
       <label for="s-default-start">Default starting time for new records</label>
       ${timeFieldMarkup('s-default-start', state.settings.defaults.startTime, 'Open time picker for default starting time', false)}
@@ -2783,6 +3076,7 @@ function settingsTabContent(tab) {
   if (tab === 'profiles') return profilesTab();
   if (tab === 'feedback') return feedbackTab();
   if (tab === 'legal') return legalTab();
+  if (tab === 'tax') return taxTab();
   return { general: generalTab, appearance: appearanceTab, workflow: workflowTab, options: optionsTab }[tab] || generalTab;
 }
 
@@ -4172,8 +4466,8 @@ function rateConfirmationQuestions(job, dateVal, dayType, paymentType) {
       title: `${dayLabel} rate`,
       icon: 'sun',
       description: `Apply this job’s configured ${dayLabel.toLowerCase()} rate to the shift?`,
-      rateLabel: calc.formatRuleLabel(weekendRule, state.settings.currency),
-      applyLabel: `Apply ${calc.formatRuleLabel(weekendRule, state.settings.currency)}`,
+      rateLabel: calc.formatRuleLabel(weekendRule, displayCurrency()),
+      applyLabel: `Apply ${calc.formatRuleLabel(weekendRule, displayCurrency())}`,
       skipLabel: 'Use base rate',
     });
   }
@@ -4188,8 +4482,8 @@ function rateConfirmationQuestions(job, dateVal, dayType, paymentType) {
       title: `${triggerLabel} loading`,
       icon: 'clock',
       description: `Apply this job’s additional loading to this ${triggerLabel.toLowerCase()} shift?`,
-      rateLabel: calc.formatRuleLabel(additionalRule, state.settings.currency),
-      applyLabel: `Apply ${calc.formatRuleLabel(additionalRule, state.settings.currency)}`,
+      rateLabel: calc.formatRuleLabel(additionalRule, displayCurrency()),
+      applyLabel: `Apply ${calc.formatRuleLabel(additionalRule, displayCurrency())}`,
       skipLabel: 'No extra loading',
     });
   }
@@ -4784,7 +5078,7 @@ function handleJobEditSubmit(id, event) {
 
 /** Human-readable before → after lines for the pay settings that changed. */
 function jobPayChangeLines(before, after) {
-  const rule = (r) => (calc.normalizeRule(r).type === 'none' ? 'none' : calc.formatRuleLabel(r, state.settings.currency));
+  const rule = (r) => (calc.normalizeRule(r).type === 'none' ? 'none' : calc.formatRuleLabel(r, displayCurrency()));
   const lines = [];
   const payBefore = jobCardPaySummary(before);
   const payAfter = jobCardPaySummary(after);
@@ -5007,7 +5301,7 @@ async function handleCycleExport(format, cycleKey, visibility = state.settings.e
   const cycle = cycles.find((c) => c.key === cycleKey);
   if (!cycle) return;
   try {
-    const options = { currency: state.settings.currency, visibility: store.normalizeExportVisibility(visibility), jobs: state.settings.jobs };
+    const options = { currency: displayCurrency(), visibility: store.normalizeExportVisibility(visibility), jobs: state.settings.jobs };
     const exportModule = await import('./export.js');
     let result;
     if (format === 'pdf') result = await exportModule.exportCyclePDF(cycle, options);
@@ -5092,7 +5386,7 @@ async function handleJobExport(format, cycleKey, jobKey, visibility = state.sett
   const jobGroup = groupRecordsByJob(cycle.records).find((g) => g.key === jobKey);
   if (!jobGroup) return;
   try {
-    const options = { currency: state.settings.currency, visibility: store.normalizeExportVisibility(visibility), jobs: state.settings.jobs };
+    const options = { currency: displayCurrency(), visibility: store.normalizeExportVisibility(visibility), jobs: state.settings.jobs };
     const exportModule = await import('./export.js');
     const scoped = exportModule.jobScopedGroup(cycle, jobKey, jobGroup.name);
     let result;
@@ -5320,6 +5614,7 @@ function wireSettingsModalEvents() {
  *  navigateSettingsTab() swaps that pane, never binding the modal's
  *  close/backdrop/rail listeners a second time. */
 function wireSettingsContentEvents() {
+  if (isNativeApp()) setTimeout(useThemedPickersInApp, 0); // after this pane's own handlers are bound
   document.querySelectorAll('[data-profile-action]').forEach((b) =>
     b.addEventListener('click', () => handleProfileAction(b.dataset.profileAction, b.dataset.id))
   );
@@ -5417,6 +5712,37 @@ function wireSettingsContentEvents() {
     });
   });
 
+  document.getElementById('s-currency-choice')?.addEventListener('change', (e) => {
+    const value = e.target.value;
+    const other = document.getElementById('s-currency-other-field');
+    const customField = document.getElementById('s-currency-custom-field');
+    if (other) other.hidden = value !== '__other';
+    if (customField) customField.hidden = value !== '__custom';
+    if (value === '__other') { document.getElementById('s-currency')?.focus(); return; }
+    if (value === '__custom') {
+      const symbolInput = document.getElementById('s-currency-symbol');
+      if (symbolInput && !symbolInput.value) symbolInput.focus();
+      else saveCustomCurrencyFromInputs();
+      return;
+    }
+    if (value === state.settings.currency && !state.settings.customCurrency) return;
+    state.settings = { ...state.settings, currency: value, customCurrency: null };
+    persist();
+    render();
+  });
+  // The custom symbol/name save as they're typed, without redrawing (a redraw
+  // mid-edit would steal focus or swallow a tap on Close); the page updates
+  // when Settings closes, or straight away on Enter.
+  ['s-currency-symbol', 's-currency-name'].forEach((id) => {
+    const input = document.getElementById(id);
+    input?.addEventListener('input', () => saveCustomCurrencyFromInputs({ redraw: false }));
+    input?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        saveCustomCurrencyFromInputs({ redraw: true, force: true });
+      }
+    });
+  });
   document.getElementById('s-currency')?.addEventListener('change', (e) => {
     const code = normalizeCurrencyInput(e.target.value);
     const errorEl = document.getElementById('s-currency-error');
@@ -5429,8 +5755,8 @@ function wireSettingsContentEvents() {
     }
     e.target.removeAttribute('aria-invalid');
     if (errorEl) errorEl.textContent = '';
-    if (code === state.settings.currency) return;
-    state.settings = { ...state.settings, currency: code };
+    if (code === state.settings.currency && !state.settings.customCurrency) return;
+    state.settings = { ...state.settings, currency: code, customCurrency: null };
     persist();
     render();
   });
@@ -5500,6 +5826,27 @@ function wireSettingsContentEvents() {
       persist();
       render();
     })
+  );
+  const saveTax = (patch) => {
+    const t = normalizeTaxSettings(state.settings.tax);
+    state.settings = { ...state.settings, tax: normalizeTaxSettings({ ...t, ...patch, options: { ...t.options, ...(patch.options || {}) } }) };
+    persist();
+    render();
+  };
+  document.getElementById('s-tax-enabled')?.addEventListener('change', (e) => saveTax({ enabled: e.target.checked }));
+  document.getElementById('s-tax-country')?.addEventListener('change', (e) => {
+    const t = normalizeTaxSettings(state.settings.tax);
+    if (e.target.value === t.country) return;
+    // A new country starts from its own default options.
+    state.settings = { ...state.settings, tax: normalizeTaxSettings({ enabled: t.enabled, country: e.target.value }) };
+    persist();
+    render();
+  });
+  document.querySelectorAll('[data-tax-option]').forEach((input) =>
+    input.addEventListener('change', (e) => saveTax({ options: { [e.target.dataset.taxOption]: e.target.checked } }))
+  );
+  document.querySelectorAll('select[id^="s-tax-opt-"]').forEach((select) =>
+    select.addEventListener('change', (e) => saveTax({ options: { [e.target.id.replace('s-tax-opt-', '')]: e.target.value } }))
   );
   document.getElementById('s-end-time-mode')?.addEventListener('change', (e) => {
     // Independent of payCalculationMode — see durationModeForForm(): a
@@ -5576,6 +5923,9 @@ function wireEvents() {
   // Dashboard "Add work" shortcut — purely a convenience scroll/focus
   // into the existing form below; it creates no new state and submits
   // through the same #record-form as always.
+  wireClock();
+  syncClockTimers();
+  if (isNativeApp()) useThemedPickersInApp();
   document.getElementById('btn-quick-add')?.addEventListener('click', () => {
     document.getElementById('form-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     document.getElementById('f-date')?.focus({ preventScroll: true });

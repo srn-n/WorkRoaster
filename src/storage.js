@@ -19,6 +19,8 @@ import { recordMinutes, getCycleForDate, hasEndTime, normalizeRule, normalizeFix
 import { normalizeJob, findJob, makeJobId } from './jobs.js';
 import { safeId } from './ids.js';
 import { saveBlob } from './save-file.js';
+import { normalizeCustomCurrency } from './currency.js';
+import { normalizeTaxSettings } from './tax.js';
 
 export const RECORDS_KEY = 'modern_work_hours_tracker_v1';
 export const SETTINGS_KEY = 'modern_work_hours_tracker_v1_settings';
@@ -235,6 +237,30 @@ let activeProfileId = DEFAULT_PROFILE_ID;
 export const recordsKeyFor = (id) => (id === DEFAULT_PROFILE_ID ? RECORDS_KEY : `${RECORDS_KEY}__${id}`);
 export const settingsKeyFor = (id) => (id === DEFAULT_PROFILE_ID ? SETTINGS_KEY : `${SETTINGS_KEY}__${id}`);
 export const notesKeyFor = (id) => (id === DEFAULT_PROFILE_ID ? NOTES_KEY : `${NOTES_KEY}__${id}`);
+export const CLOCK_KEY = 'modern_work_hours_tracker_v1_clock';
+export const clockKeyFor = (id) => (id === DEFAULT_PROFILE_ID ? CLOCK_KEY : `${CLOCK_KEY}__${id}`);
+
+/** The running clock-in for the active profile: { startedAt: ms } or null.
+ *  A start in the future or more than 7 days ago is treated as no clock-in. */
+export function loadClock() {
+  const raw = safeParse(localStorage.getItem(clockKeyFor(activeProfileId)), null);
+  const startedAt = raw && Number(raw.startedAt);
+  if (!Number.isFinite(startedAt)) return null;
+  const now = Date.now();
+  if (startedAt > now + 60000 || now - startedAt > 7 * 24 * 3600 * 1000) return null;
+  return { startedAt };
+}
+
+/** Save ({ startedAt }) or clear (null) the active profile's clock-in. */
+export function saveClock(clock) {
+  try {
+    if (clock) localStorage.setItem(clockKeyFor(activeProfileId), JSON.stringify({ startedAt: Number(clock.startedAt) }));
+    else localStorage.removeItem(clockKeyFor(activeProfileId));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** { active, profiles: [{ id, name }], theme?, visualTheme?, headerTransparency?, motionStyle? }
  *  — always at least the first profile. */
@@ -264,7 +290,7 @@ export function setActiveProfile(id) {
 
 /** Add a profile (empty records and notes; settings start from the defaults
  *  with the current appearance and currency). Returns the new profile. */
-export function createProfile(name, { theme, visualTheme, headerTransparency, motionStyle, currency } = {}) {
+export function createProfile(name, { theme, visualTheme, headerTransparency, motionStyle, currency, customCurrency } = {}) {
   const index = loadProfiles();
   const clean = String(name || '').trim().slice(0, 40) || 'New profile';
   const ids = index.profiles.map((p) => p.id);
@@ -276,7 +302,7 @@ export function createProfile(name, { theme, visualTheme, headerTransparency, mo
   }
   const profile = { id, name: clean };
   const appearance = pickAppearance({ theme, visualTheme, headerTransparency, motionStyle });
-  const settings = normalizeSettings({ ...appearance, ...(currency ? { currency } : {}) });
+  const settings = normalizeSettings({ ...appearance, ...(currency ? { currency } : {}), ...(customCurrency ? { customCurrency } : {}) });
   localStorage.setItem(recordsKeyFor(id), '[]');
   localStorage.setItem(settingsKeyFor(id), JSON.stringify({ ...settings, schemaVersion: SCHEMA_VERSION }));
   localStorage.setItem(notesKeyFor(id), '[]');
@@ -405,6 +431,10 @@ export function normalizeSettings(stored) {
     ...base,
     ...stored,
     currency,
+    // Optional personalised currency label (symbol + name). null = use the ISO code above.
+    customCurrency: normalizeCustomCurrency(stored.customCurrency),
+    // Optional tax estimate (off by default) — see tax.js.
+    tax: normalizeTaxSettings(stored.tax),
     theme: ['system', 'light', 'dark'].includes(stored.theme) ? stored.theme : base.theme,
     visualTheme: VISUAL_THEMES.includes(stored.visualTheme) ? stored.visualTheme : base.visualTheme,
     motionStyle: MOTION_STYLES.includes(stored.motionStyle) ? stored.motionStyle : base.motionStyle,

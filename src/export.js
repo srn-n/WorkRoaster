@@ -336,6 +336,14 @@ export function exportCyclePDF(group, { currency = 'AUD', visibility, jobs } = {
  *  (symbol before or after, e.g. "A$"#,##0.00) while the cell itself stays
  *  a real number — so SUM, sorting and charts work in Excel/Sheets. */
 function excelMoneyFormat(currency, suffix = '') {
+  const tail0 = suffix ? `"${suffix}"` : '';
+  if (currency && typeof currency === 'object') {
+    // Personalised currency: its own symbol in front (quotes removed so the
+    // Excel number format stays valid).
+    const symbol = String(currency.symbol || '$').replace(/"/g, '');
+    const gap = /^[A-Za-z]/.test(symbol.slice(-1)) || symbol.length > 2 ? ' ' : '';
+    return `"${symbol}${gap}"#,##0.00${tail0}`;
+  }
   let parts;
   try {
     parts = new Intl.NumberFormat(undefined, { style: 'currency', currency }).formatToParts(1234.5);

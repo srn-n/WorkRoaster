@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark theme versions (src/styles.css dark palette). -->
+    <color name="wr_accent">#C7924D</color>
+    <color name="wr_dialog_background">#22201D</color>
+    <color name="wr_text_primary">#F2F0EA</color>
+    <color name="wr_text_secondary">#A3A6AB</color>
+</resources>

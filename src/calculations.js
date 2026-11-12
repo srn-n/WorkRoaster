@@ -113,6 +113,14 @@ export function formatDuration(minutes) {
 
 export function formatMoney(amount, currency = 'AUD', locale = undefined) {
   const value = Number(amount) || 0;
+  // A personalised currency ({ symbol, name }, see currency.js): the
+  // person's own symbol in front of the number. Nothing is converted.
+  if (currency && typeof currency === 'object') {
+    const symbol = String(currency.symbol || '$');
+    const number = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(value));
+    const gap = /^[A-Za-z]/.test(symbol.slice(-1)) || symbol.length > 2 ? ' ' : '';
+    return `${value < 0 ? '-' : ''}${symbol}${gap}${number}`;
+  }
   try {
     return new Intl.NumberFormat(locale, {
       style: 'currency',

@@ -17,10 +17,16 @@ test('app ID is the permanent studio ID', () => {
   assert.match(read('android/app/build.gradle'), /applicationId "com\.simplymadestudio\.workroaster"/);
 });
 
-test('no network access: INTERNET is removed, no other permission is requested', () => {
+test('no network access: INTERNET is removed; only the local reminder permissions remain', () => {
   assert.match(manifest, /<uses-permission android:name="android\.permission\.INTERNET" tools:node="remove" \/>/);
+  assert.match(manifest, /SCHEDULE_EXACT_ALARM" tools:node="remove"/);
   const requested = [...manifest.matchAll(/<uses-permission\b[^>]*>/g)].map((m) => m[0]).filter((t) => !/tools:node="remove"/.test(t));
   assert.deepEqual(requested, []);
+  // Permissions merged in from plugins: exactly the local-notification set.
+  const pluginManifest = fs.readFileSync(new URL('../../node_modules/@capacitor/local-notifications/android/src/main/AndroidManifest.xml', import.meta.url), 'utf8');
+  const fromPlugin = [...pluginManifest.matchAll(/android\.permission\.([A-Z_]+)/g)].map((m) => m[1]).sort();
+  const removedHere = [...manifest.matchAll(/android\.permission\.([A-Z_]+)" tools:node="remove"/g)].map((m) => m[1]);
+  assert.deepEqual(fromPlugin.filter((p) => !removedHere.includes(p)), ['POST_NOTIFICATIONS', 'RECEIVE_BOOT_COMPLETED', 'WAKE_LOCK']);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
 });
 
@@ -31,6 +37,7 @@ test('records are not copied to Google cloud backup', () => {
 test('no tracking, ads, sign-in or remote-content libraries', () => {
   const deps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies });
   const banned = /firebase|analytics|admob|google-services|play-services|sentry|crashlytics|onesignal|push-notifications|auth|sign-?in|@capacitor\/(browser|http|preferences)/i;
+  // Allowed native plugins (all local): app, local-notifications, android/core/cli.
   assert.deepEqual(deps.filter((d) => banned.test(d)), []);
   assert.doesNotMatch(read('android/build.gradle'), /google-services/);
   assert.doesNotMatch(read('android/app/build.gradle'), /google-services/);

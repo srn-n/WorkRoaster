@@ -13,6 +13,40 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- Android's own dialogs opened by the WebView (date/time pickers,
+             dropdown lists) and by Capacitor (confirm/alert) use WorkRoaster's
+             colours instead of the default teal/pink, in light and dark. -->
+        <item name="colorPrimary">@color/wr_accent</item>
+        <item name="colorPrimaryDark">@color/wr_accent</item>
+        <item name="colorAccent">@color/wr_accent</item>
+        <item name="android:colorAccent">@color/wr_accent</item>
+        <item name="android:datePickerDialogTheme">@style/WorkRoaster.Dialog</item>
+        <item name="android:timePickerDialogTheme">@style/WorkRoaster.Dialog</item>
+        <item name="android:alertDialogTheme">@style/WorkRoaster.Dialog</item>
+        <item name="alertDialogTheme">@style/WorkRoaster.Dialog</item>
+    </style>
+
+    <style name="WorkRoaster.Dialog" parent="Theme.AppCompat.DayNight.Dialog.Alert">
+        <item name="colorAccent">@color/wr_accent</item>
+        <item name="colorPrimary">@color/wr_accent</item>
+        <item name="android:colorAccent">@color/wr_accent</item>
+        <item name="android:colorPrimary">@color/wr_accent</item>
+        <item name="android:windowBackground">@drawable/workroaster_dialog_background</item>
+        <item name="android:colorBackground">@color/wr_dialog_background</item>
+        <item name="android:textColorPrimary">@color/wr_text_primary</item>
+        <item name="android:textColorSecondary">@color/wr_text_secondary</item>
+        <item name="android:headerBackground">@color/wr_accent</item>
+        <item name="android:datePickerStyle">@style/WorkRoaster.DatePicker</item>
+        <item name="android:timePickerStyle">@style/WorkRoaster.TimePicker</item>
+    </style>
+
+    <style name="WorkRoaster.DatePicker" parent="android:Widget.Material.DatePicker">
+        <item name="android:headerBackground">@color/wr_accent</item>
+    </style>
+
+    <style name="WorkRoaster.TimePicker" parent="android:Widget.Material.TimePicker">
+        <item name="android:headerBackground">@color/wr_accent</item>
+        <item name="android:numbersSelectorColor">@color/wr_accent</item>
     </style>
 
 

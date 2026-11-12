@@ -93,6 +93,8 @@ The app keeps the website's promises, and the platform enforces them:
   Google's backup.
 - **No sign-in, ads, analytics or tracking libraries.** No storage permission
   either: exports and backups use Android's own "Save as" dialog.
+- **The only permissions** are for the local "still clocked in?" reminder
+  (notifications, keep it after a restart). Nothing is sent anywhere.
 
 `tests/unit/android-promises.test.mjs` fails if any of this changes, and the
 build workflow checks the finished APK for the `INTERNET` permission.

@@ -39,9 +39,17 @@ Break any of these and the change is wrong, however good it looks.
    The only outbound actions are links the person taps (privacy/terms pages,
    the studio site) and the feedback `mailto:`.
 3. **The Android app has no `INTERNET` permission** and `allowBackup="false"`.
-   `tests/unit/android-promises.test.mjs` and the build workflow both enforce
-   this. Never add Firebase, Google Play services, sign-in, push, analytics,
-   `@capacitor/http`, `@capacitor/browser`, or any library that phones home.
+   Its only permissions are for the local clock-in reminder
+   (`@capacitor/local-notifications`):
+   - `POST_NOTIFICATIONS`
+   - `RECEIVE_BOOT_COMPLETED`
+   - `WAKE_LOCK`
+
+   Exact-alarm permissions are removed: Play restricts them.
+   `tests/unit/android-promises.test.mjs` pins this exact list, and the build
+   workflow checks the APK. Never add Firebase, Google Play services, sign-in,
+   push (server) notifications, analytics, `@capacitor/http`,
+   `@capacitor/browser`, or any library that phones home.
 4. Feedback goes **only** to `samiiiur@yahoo.com` through the person's own
    email app (`src/feedback.js`). Nothing is sent by the app itself.
 
@@ -87,7 +95,7 @@ Break any of these and the change is wrong, however good it looks.
 ```bash
 npm ci                 # install (CI uses: npm ci --ignore-scripts)
 npm run dev            # Vite dev server
-npm test               # unit tests (node:test), currently 85, must all pass
+npm test               # unit tests (node:test), currently 100, must all pass
 npm run build          # production build → dist/ (adds CSP meta, version)
 npm run preview        # serve dist/ locally (port 4173)
 npx cap sync android   # copy dist/ into the Android project
@@ -115,8 +123,10 @@ src/platform.js         # isNativeApp(): true only inside the Android app
 src/native.js           # Android-only helpers (dynamic import; never loaded on the website)
 src/guide.js            # in-app Guide text (website vs app wording via IN_APP)
 src/feedback.js         # feedback mailto builder (encoded; length-capped)
+src/tax.js              # optional tax ESTIMATE: 7 countries' current rates + sources; per-cycle annualise/divide
+src/currency.js         # ISO codes, MAJOR_CURRENCIES menu, custom symbol/name (sanitised: no markup chars)
 src/calculator.js       # built-in calculator (tokenised, no eval)
-src/currency.js, ids.js, style-heal.js
+src/ids.js, style-heal.js
 src/styles.css          # all styles; themes; safe-area rules; :where(html.is-native) app rules
 tests/unit/*.test.mjs   # unit tests (incl. android-promises, ids-injection, platform)
 docs/data-model.md      # storage keys, record/settings shapes, migration rules — READ before touching data
@@ -165,6 +175,27 @@ CHANGELOG.md            # user-facing changes, newest first
     to the system).
   - `confirm()`/`alert()` work in the app: Capacitor shows them as native
     dialogs.
+- **Currency.** `settings.currency` is an ISO code. The optional
+  `settings.customCurrency` (`{ symbol, name }`) overrides how amounts are
+  labelled (`displayCurrency()` in `app.js`; `formatMoney` accepts either).
+  Nothing is ever converted.
+- **Tax estimate.** Optional (`settings.tax`, off by default).
+  - `tax.js` annualises a cycle's pay, applies the country's yearly rules,
+    then divides back.
+  - Each country entry carries its year, bands, explanation, exclusions and
+    sources.
+  - Figures were checked in Nov 2026 (AU 2026–27, US 2026, UK 2026–27, KR
+    2026, JP 2026, MY YA2026, BD 2026–27).
+  - **Re-check them every tax year.** Update the entry and its test in
+    `tests/unit/tax.test.mjs` (tests use the sources' worked examples).
+- **Clock-in.** Per-profile key `…_clock` holds `{ startedAt }`.
+  - Clock out fills the record form; the person still saves it.
+  - The 12 h reminder is a local notification in the app
+    (`native.js#scheduleClockReminder`), and a browser `Notification` on the
+    website while it's open, plus an in-page warning.
+- **Android pickers.** In the app, date/time inputs that have a themed popover
+  become read-only and tap-to-open (`useThemedPickersInApp`). Android's own
+  dialogs are themed in `res/values*/styles.xml` and `workroaster_colors.xml`.
 - **Version.** `package.json` → `__APP_VERSION__` (Vite define).
   - It shows as "Version x.y.z" in Settings → Privacy & terms and in feedback
     device details.
@@ -213,7 +244,7 @@ CHANGELOG.md            # user-facing changes, newest first
 
 ## 8. Current status (keep this section up to date)
 
-_Last updated: 2026-11-10_
+_Last updated: 2026-11-12_
 
 **Done**
 - Website live; security audit (29 Oct) fixes shipped; phases 1–23 of
@@ -222,16 +253,24 @@ _Last updated: 2026-11-10_
   icons and splash.
 - Offensive security test of the app (2 Nov), with hardening shipped in
   `5f0b4f2`.
-- Version 0.0.1 set; CI debug build green (run #10).
+- Version 0.0.1 set; CI debug builds green.
+- 12 Nov (Notion "Up next" tasks):
+  - currency menu with major currencies and a custom symbol/name;
+  - optional tax estimate for 7 countries;
+  - live clock-in with a 12-hour reminder;
+  - themed date/time pickers in the app;
+  - Guide brought up to date.
 
 **Next (in order)**
-1. Install the debug APK on a real phone and run the device checklist in
-   `docs/android-release.md`. Not done yet; so far only the simulated
-   app-mode checks have run.
+1. Push and check the CI build (new Android resources and plugin). Then
+   install the debug APK on a real phone and run the device checklist in
+   `docs/android-release.md`, including the new clock-in reminder and picker
+   items.
 2. Binary-level check of the built APK: merged manifest, exported
    components, signature, dex strings.
 3. Create the upload keystore and add the 4 GitHub secrets, then tag `v0.0.1`
-   for the first signed release.
+   for the first signed release. The version may be bumped to 0.0.2 first;
+   that's the owner's call.
 4. Play listing assets: feature graphic 1024×500, screenshots, descriptions.
    Recruit 15–20 closed testers.
 5. Closed test (14 days), then the production application.
@@ -246,7 +285,14 @@ _Last updated: 2026-11-10_
 - CSP `style-src 'unsafe-inline'`: 16 inline `style=""` values (chart bars,
   calendar intensity…). Low risk; optional cleanup someday.
 - The studio privacy page still says the feedback form "isn't connected to
-  anything", but it now opens the email app. Reword on the studio site.
+  anything", but it now opens the email app. Reword on the studio site, and
+  mention the optional local clock-in reminder notification.
+- The tax estimate excludes social insurance (Korea, Japan), state taxes
+  (USA), Scottish rates (UK) and most reliefs/credits. This is stated in-app.
+  Korea's earned-income-credit caps above ₩70M follow PwC's summary and are
+  approximate.
+- Exports don't include the tax estimate (deliberately: reports show recorded
+  pay).
 - `CHANGELOG.md` has user-facing entries; `docs/updates/` has the full trail.
 
 ## 9. Key decisions (why things are the way they are)
@@ -260,6 +306,9 @@ _Last updated: 2026-11-10_
 | 1 Nov 2026 | Files are saved through Android's "Save as" (SAF), not a share sheet and not storage permissions. |
 | 1 Nov 2026 | The `INTERNET` permission is removed; the website and the app keep identical promises. |
 | 2 Nov 2026 | Version numbering starts at **0.0.1**; `package.json` is the single source. |
+| 12 Nov 2026 | Currency: **no conversion and no live rates** (owner's decision). Labels only: a major-currency menu plus a custom symbol/name. |
+| 12 Nov 2026 | Tax estimate: optional, off by default, 7 countries, estimates only, current-year rates with sources shown in-app. |
+| 12 Nov 2026 | Clock-in reminder: the owner approved the Android notifications permission. Local only; exact alarms removed for Play policy. |
 | 2 Nov 2026 | Third-party security report reviewed. No minimatch override (breaks glob, no shipped code affected). Trusted Types passthrough rejected (it gives no protection). HSTS is already sent by Vercel. |
 
 ---
