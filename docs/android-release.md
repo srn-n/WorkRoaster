@@ -132,4 +132,6 @@ first**, uninstall the debug app, then install from Play and restore.
 - [ ] Tapping the date or a time field opens WorkRoaster's own picker (not Android's). Settings' "pay cycle started on" date opens Android's picker in WorkRoaster colours.
 - [ ] Clock in → Android asks once for notifications → clock out fills the form. To test the reminder, clock in, then set the phone clock 12 hours ahead (or wait): the notification appears with the app closed.
 - [ ] Settings → Tax estimate: turn on, try a few countries; amounts appear on the current cycle and in history.
-- [ ] Settings → Apps → WorkRoaster → Permissions shows **only Notifications**.
+- [ ] Taps squeeze and spring back (Settings → Appearance → Motion: Bouncy); switching an option or ticking a box pops. With Android's "Remove animations" on, nothing moves (by design).
+- [ ] Settings → Appearance → Vibration: off by default. Turn on → one buzz; Light / Medium / Strong each feel different; taps buzz once. Turn Android's own *touch vibration* off: WorkRoaster still buzzes. Turn it off in WorkRoaster: silent.
+- [ ] Settings → Apps → WorkRoaster → Permissions shows **only Notifications** (vibration needs no prompt and isn't listed there).

@@ -15,6 +15,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // App-local plugins must be registered before the bridge starts.
         registerPlugin(SaveFilePlugin.class);
+        registerPlugin(VibratePlugin.class);
         super.onCreate(savedInstanceState);
 
         // Defence in depth. Capacitor serves two internal routes to the page:

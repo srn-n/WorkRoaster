@@ -486,10 +486,11 @@ export const GUIDE_SECTIONS = [
         body: `<p><strong>Settings → Feedback</strong> writes an email to Simply Made Studio in ${IN_APP ? 'your email app' : 'your email app or webmail'} — nothing is sent until you press Send there. You can add ${IN_APP ? 'device' : 'browser'} and screen details to help with layout bugs. <strong>Settings → Privacy &amp; terms</strong> shows the version you're using and links to the full privacy policy and terms.</p>`,
       },
       {
-        title: 'Appearance: themes, top bar and motion',
-        keywords: 'appearance theme themes sky sage plum dark light mode colour color glass top bar transparency motion bounce bouncy smooth minimal animation',
+        title: IN_APP ? 'Appearance: themes, top bar, motion and vibration' : 'Appearance: themes, top bar and motion',
+        keywords: 'appearance theme themes sky sage plum dark light mode colour color glass top bar transparency motion bounce bouncy smooth minimal animation vibration vibrate haptic buzz',
         body: `<p><strong>Settings → Appearance</strong> changes how WorkRoaster looks — never your data. Pick a <strong>visual theme</strong> (WorkRoaster, Sky, Sage or Plum); each has a light and a dark version with the same colours, and <strong>Light or dark</strong> chooses between them (or follows your device).</p>
-          <p><strong>Top bar transparency</strong> sets how much of the page shows through the floating glass bar. <strong>Motion &amp; bounce</strong> sets how things move: <em>Bouncy</em> (springy presses and pop-in menus), <em>Smooth</em> (no overshoot) or <em>Minimal</em> (no movement). If your device asks for reduced motion or reduced transparency, WorkRoaster follows it. Appearance is shared by all profiles.</p>`,
+          <p><strong>Top bar transparency</strong> sets how much of the page shows through the floating glass bar. <strong>Motion &amp; bounce</strong> sets how things move: <em>Bouncy</em> (springy presses and pop-in menus), <em>Smooth</em> (no overshoot) or <em>Minimal</em> (no movement). If your device asks for reduced motion or reduced transparency, WorkRoaster follows it. Appearance is shared by all profiles.</p>${IN_APP ? `
+          <p><strong>Vibration</strong> (off at first) gives a short buzz when you tap a button or switch an option — <em>Light</em>, <em>Medium</em> or <em>Strong</em>. It works even if your phone's own touch vibration is off; if vibration is turned off for the whole phone, it stays off. It's saved on this phone only.</p>` : ''}`,
       },
     ],
   },

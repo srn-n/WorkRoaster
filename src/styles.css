@@ -3178,7 +3178,7 @@ input[type="date"], input[type="time"] { accent-color: var(--accent); }
 
 /* Settings → Currency: the "other code" and "custom" sub-fields are shown
    only for their choice (author display rules would otherwise beat [hidden]). */
-#s-currency-other-field[hidden], #s-currency-custom-field[hidden] { display: none; }
+#s-currency-other-field[hidden], #s-currency-custom-field[hidden], #s-vibration-strengths[hidden] { display: none; }
 #s-currency-custom-field > .field-help { grid-column: 1 / -1; }
 
 /* Tax estimate (Settings → Tax estimate; hero and cycle list) */
@@ -3212,3 +3212,32 @@ input[type="date"], input[type="time"] { accent-color: var(--accent); }
 
 /* Android app: date/time fields open WorkRoaster's own picker on tap. */
 input.is-tap-to-open { cursor: pointer; caret-color: transparent; }
+.appearance-vibration .segmented { margin-top: 10px; }
+
+/* ---- Touch: press and switch feedback (press.js) -------------------- */
+/* A finger adds .is-pressed at once (the WebView holds back :active on a */
+/* quick tap), so phones get the same squeeze-and-spring as a mouse.     */
+/* Kept after the (hover: none) block: a tapped control also counts as   */
+/* hovered there, and that block's transform: none used to cancel the    */
+/* press on every phone. The :active forms are repeated for that reason. */
+.btn.is-pressed:not(:disabled), .icon-btn.is-pressed:not(:disabled), .chip-tab.is-pressed, .override-chip.is-pressed,
+.rate-choice.is-pressed, .weekday-chip.is-pressed span, .visual-theme-card.is-pressed, .segmented-option.is-pressed,
+.mode-option.is-pressed, .date-picker-day.is-pressed, .job-picker-option.is-pressed, .rail-tab.is-pressed, .text-link-btn.is-pressed,
+.btn:active:not(:disabled), .icon-btn:active:not(:disabled), .rate-choice:active, .visual-theme-card:active,
+.segmented-option:active, .mode-option:active {
+  transform: scale(var(--press-scale));
+  transition-duration: 90ms;
+  transition-timing-function: var(--ease-standard);
+}
+.calc-key.is-pressed, .calc-key:active { transform: scale(0.96); transition-duration: 90ms; transition-timing-function: var(--ease-standard); }
+.calc-key { transition: background-color var(--dur-micro) var(--ease-standard), border-color var(--dur-micro) var(--ease-standard), transform var(--dur-spring) var(--ease-spring); }
+/* Switching an option: the chosen card, chip or tick box pops. */
+.is-switched { animation: glass-select-pop var(--dur-spring) var(--ease-spring); }
+input[type="checkbox"].is-switched { animation-name: switch-tick-pop; }
+@keyframes switch-tick-pop { 0% { transform: scale(0.8); } 100% { transform: scale(1); } }
+:root[data-motion="minimal"] .is-pressed, :root[data-motion="minimal"] .is-pressed span { transform: none !important; }
+:root[data-motion="minimal"] .is-switched { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .is-pressed, .is-pressed span { transform: none !important; }
+  .is-switched { animation: none; }
+}

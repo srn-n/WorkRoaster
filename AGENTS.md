@@ -40,10 +40,11 @@ Break any of these and the change is wrong, however good it looks.
    the studio site) and the feedback `mailto:`.
 3. **The Android app has no `INTERNET` permission** and `allowBackup="false"`.
    Its only permissions are for the local clock-in reminder
-   (`@capacitor/local-notifications`):
+   (`@capacitor/local-notifications`) and the optional tap vibration:
    - `POST_NOTIFICATIONS`
    - `RECEIVE_BOOT_COMPLETED`
    - `WAKE_LOCK`
+   - `VIBRATE` (the app's own request; granted at install, no prompt)
 
    Exact-alarm permissions are removed: Play restricts them.
    `tests/unit/android-promises.test.mjs` pins this exact list, and the build
@@ -124,6 +125,8 @@ src/native.js           # Android-only helpers (dynamic import; never loaded on 
 src/guide.js            # in-app Guide text (website vs app wording via IN_APP)
 src/feedback.js         # feedback mailto builder (encoded; length-capped)
 src/tax.js              # optional tax ESTIMATE: 7 countries' current rates + sources; per-cycle annualise/divide
+src/press.js            # touch press (.is-pressed) + "just switched" pop; tap hook for vibration
+src/vibration.js        # app-only vibration choice (own key, per phone, not in backups)
 src/currency.js         # ISO codes, MAJOR_CURRENCIES menu, custom symbol/name (sanitised: no markup chars)
 src/calculator.js       # built-in calculator (tokenised, no eval)
 src/ids.js, style-heal.js
@@ -136,6 +139,7 @@ android/                # committed Capacitor Android project
   app/src/main/AndroidManifest.xml        # promises: no INTERNET (tools:node="remove"), allowBackup=false, taskAffinity=""
   app/src/main/java/.../MainActivity.java # registers SaveFile; blocks /_capacitor_file_ & /_capacitor_content_
   app/src/main/java/.../SaveFilePlugin.java # Android "Save as" (SAF): type allowlist, name cleaning, size cap
+  app/src/main/java/.../VibratePlugin.java  # "vibrate on taps": vibrator directly (ignores the touch-vibration switch)
   app/build.gradle      # versionName from package.json; signing from env vars only
 assets/                 # icon + splash sources (regenerate with @capacitor/assets)
 capacitor.config.json   # appId, webDir dist, SystemBars insets → CSS vars
@@ -244,7 +248,7 @@ CHANGELOG.md            # user-facing changes, newest first
 
 ## 8. Current status (keep this section up to date)
 
-_Last updated: 2026-11-12_
+_Last updated: 2026-11-13_
 
 **Done**
 - Website live; security audit (29 Oct) fixes shipped; phases 1–23 of
@@ -260,12 +264,17 @@ _Last updated: 2026-11-12_
   - live clock-in with a 12-hour reminder;
   - themed date/time pickers in the app;
   - Guide brought up to date.
+- 13 Nov (Notion "Up next" task): touch presses now squeeze and spring on
+  phones (website and app), switching an option pops, and the app has an
+  optional vibration setting (off by default; Light / Medium / Strong) that
+  works even when the phone's touch vibration is off. Adds the `VIBRATE`
+  permission.
 
 **Next (in order)**
 1. Push and check the CI build (new Android resources and plugin). Then
    install the debug APK on a real phone and run the device checklist in
-   `docs/android-release.md`, including the new clock-in reminder and picker
-   items.
+   `docs/android-release.md`, including the clock-in reminder, picker,
+   press-bounce and vibration items.
 2. Binary-level check of the built APK: merged manifest, exported
    components, signature, dex strings.
 3. Create the upload keystore and add the 4 GitHub secrets, then tag `v0.0.1`
@@ -310,6 +319,7 @@ _Last updated: 2026-11-12_
 | 12 Nov 2026 | Tax estimate: optional, off by default, 7 countries, estimates only, current-year rates with sources shown in-app. |
 | 12 Nov 2026 | Clock-in reminder: the owner approved the Android notifications permission. Local only; exact alarms removed for Play policy. |
 | 2 Nov 2026 | Third-party security report reviewed. No minimatch override (breaks glob, no shipped code affected). Trusted Types passthrough rejected (it gives no protection). HSTS is already sent by Vercel. |
+| 13 Nov 2026 | Tap vibration is app-only, off by default, per phone (not in backups), and uses the vibrator directly so it works with the phone's touch vibration off. `VIBRATE` added to the pinned permission list. |
 
 ---
 

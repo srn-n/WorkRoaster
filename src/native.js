@@ -10,6 +10,9 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 // App-local plugin (android/.../SaveFilePlugin.java): Android's own
 // "Save as" dialog, so the person picks the folder (or Drive) themselves.
 const SaveFile = registerPlugin('SaveFile');
+// App-local plugin (android/.../VibratePlugin.java): a short buzz on taps,
+// made with the phone's vibrator directly (see vibration.js).
+const Vibrate = registerPlugin('Vibrate');
 
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
@@ -28,6 +31,11 @@ export async function saveBlob(blob, filename) {
   const data = await blobToBase64(blob);
   const result = await SaveFile.save({ filename, data, mimeType: blob.type || 'application/octet-stream' });
   return Boolean(result && result.saved);
+}
+
+/** One short buzz: 'light' | 'medium' | 'strong'. Never throws or waits. */
+export function vibrateTap(strength) {
+  Vibrate.tap({ strength }).catch(() => {});
 }
 
 /** Android back button / gesture. The handler decides what "back" means. */

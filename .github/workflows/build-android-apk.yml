@@ -125,8 +125,8 @@ jobs:
             echo "::error::The APK requests INTERNET. WorkRoaster must not have network access."
             exit 1
           fi
-          # Anything beyond the local-reminder permissions is flagged for review.
-          ALLOWED="android.permission.POST_NOTIFICATIONS android.permission.RECEIVE_BOOT_COMPLETED android.permission.WAKE_LOCK com.simplymadestudio.workroaster.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+          # Anything beyond the local-reminder and vibration permissions is flagged for review.
+          ALLOWED="android.permission.VIBRATE android.permission.POST_NOTIFICATIONS android.permission.RECEIVE_BOOT_COMPLETED android.permission.WAKE_LOCK com.simplymadestudio.workroaster.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
           for p in $(grep -o "uses-permission: name='[^']*'" permissions.txt | sed "s/.*name='//; s/'//"); do
             case " $ALLOWED " in *" $p "*) ;; *) echo "::warning::Unexpected permission in the APK: $p (check AGENTS.md rule 3)";; esac
           done

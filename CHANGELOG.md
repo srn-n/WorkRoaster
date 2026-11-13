@@ -2,7 +2,12 @@
 
 All notable changes to WorkRoaster are listed here.
 
-## Unreleased — 2026-11-12
+## Unreleased — 2026-11-13
+
+- **Springy taps on phones and tablets:** buttons, tabs and option cards now squeeze and bounce back under your finger, like they do with a mouse, even on a quick tap. Switching an option or ticking a box gives it a small pop. (A phone-only rule had been cancelling the press.) Settings → Appearance → Motion and your device's reduce-motion setting still apply.
+- **Android app — vibration (optional, off by default):** Settings → Appearance → Vibration. Choose Light, Medium or Strong. It works even when your phone's own touch vibration is off; it stays off if vibration is switched off for the whole phone. Saved on that phone only.
+
+## Earlier in this release — 2026-11-12
 
 - **Currency menu:** pick a major currency by name (AUD default), any other ISO code, or your own symbol and name. Labels only; nothing is converted.
 - **Tax estimate (optional, off by default):** estimated tax and after-tax pay per pay cycle for Australia, the USA, the UK, South Korea, Japan, Malaysia and Bangladesh.

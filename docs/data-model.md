@@ -603,6 +603,13 @@ A profile is a separate set of records and settings. The index lives in
 - Two open tabs listen to the active profile's keys and the index; if the
   open profile is deleted in another tab, the page falls back to `default`.
 
+## Vibration (Android app only) — `localStorage["modern_work_hours_tracker_v1_vibration"]`
+
+`{ "enabled": false, "strength": "medium" }` — strength is `light`, `medium`
+or `strong`. Per phone, not per profile, and **not** in backups (how a phone
+buzzes belongs to that phone). Missing or broken reads as the default (off).
+See `src/vibration.js`.
+
 ## Backups (JSON import)
 
 `storage.js#parseBackup` validates the whole file **before** anything is

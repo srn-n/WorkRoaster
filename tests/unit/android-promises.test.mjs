@@ -17,11 +17,12 @@ test('app ID is the permanent studio ID', () => {
   assert.match(read('android/app/build.gradle'), /applicationId "com\.simplymadestudio\.workroaster"/);
 });
 
-test('no network access: INTERNET is removed; only the local reminder permissions remain', () => {
+test('no network access: INTERNET is removed; only the reminder and vibration permissions remain', () => {
   assert.match(manifest, /<uses-permission android:name="android\.permission\.INTERNET" tools:node="remove" \/>/);
   assert.match(manifest, /SCHEDULE_EXACT_ALARM" tools:node="remove"/);
   const requested = [...manifest.matchAll(/<uses-permission\b[^>]*>/g)].map((m) => m[0]).filter((t) => !/tools:node="remove"/.test(t));
-  assert.deepEqual(requested, []);
+  // The app's own request: VIBRATE, for the optional "vibrate on taps" setting.
+  assert.deepEqual(requested, ['<uses-permission android:name="android.permission.VIBRATE" />']);
   // Permissions merged in from plugins: exactly the local-notification set.
   const pluginManifest = fs.readFileSync(new URL('../../node_modules/@capacitor/local-notifications/android/src/main/AndroidManifest.xml', import.meta.url), 'utf8');
   const fromPlugin = [...pluginManifest.matchAll(/android\.permission\.([A-Z_]+)/g)].map((m) => m[1]).sort();

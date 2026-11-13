@@ -18,6 +18,8 @@ import { GUIDE_INTRO, GUIDE_SECTIONS } from './guide.js';
 import { renderCalculator, wireCalculator } from './calculator.js';
 import { isSupportedCurrency, normalizeCurrencyInput, normalizeCustomCurrency, MAJOR_CURRENCIES, currencyName } from './currency.js';
 import { isNativeApp } from './platform.js';
+import { installPressFeedback } from './press.js';
+import { VIBRATION_STRENGTHS, loadVibration, saveVibration } from './vibration.js';
 import { TAX_COUNTRIES, taxCountry, cycleTaxEstimate, normalizeTaxSettings, cyclesPerYear } from './tax.js';
 // export.js pulls in jsPDF (which itself bundles html2canvas/DOMPurify)
 // and ExcelJS — a few hundred KB the core tracker doesn't need just to
@@ -100,6 +102,8 @@ let formAdditionalOverrideMode = 'default'; // 'default' | 'none'
 let rateConfirmationDialog = null;
 /** native.js once loaded (Android app only; see initNativeApp). */
 let nativeModule = null;
+/** "Vibrate on taps" (app only; per phone, see vibration.js). */
+let vibration = isNativeApp() ? loadVibration() : { enabled: false, strength: 'medium' };
 // Pay-cycle history expand/collapse — presentation only. Holds only the
 // cycles the user has explicitly toggled (cycle key -> open?); anything
 // absent falls back to the graph's cycle (see renderRecords). Never persisted, never
@@ -362,6 +366,40 @@ const MOTION_STYLE_CHOICES = [
   { id: 'smooth', name: 'Smooth', blurb: 'The same motion, gently eased with no overshoot.' },
   { id: 'minimal', name: 'Minimal', blurb: 'No movement — things appear instantly.' },
 ];
+/** Settings → Appearance → Vibration (Android app only). */
+function vibrationFields() {
+  return `
+    <fieldset class="field-group appearance-vibration">
+      <legend>Vibration</legend>
+      <label class="checkbox-field" for="s-vibration-on">
+        <input type="checkbox" id="s-vibration-on" ${vibration.enabled ? 'checked' : ''} aria-describedby="s-vibration-help">
+        <span>Vibrate when I tap a button or switch an option</span>
+      </label>
+      <p class="field-help" id="s-vibration-help">Works even if your phone's own touch vibration is off. If vibration is turned off for the whole phone, it stays off. Saved on this phone only, not in backups.</p>
+      <div class="segmented" id="s-vibration-strengths" role="radiogroup" aria-label="Vibration strength" ${vibration.enabled ? '' : 'hidden'}>
+        ${VIBRATION_STRENGTHS.map((v) => `
+        <label class="segmented-option ${vibration.strength === v.id ? 'is-selected' : ''}">
+          <input type="radio" name="s-vibration-strength" value="${v.id}" ${vibration.strength === v.id ? 'checked' : ''} aria-describedby="s-vibration-${v.id}-desc">
+          <span class="segmented-name">${esc(v.name)}</span>
+          <span class="segmented-desc" id="s-vibration-${v.id}-desc">${esc(v.blurb)}</span>
+        </label>`).join('')}
+      </div>
+    </fieldset>`;
+}
+
+/** One buzz for a tap, when the person has turned vibration on. */
+function vibrateForTap(el) {
+  if (!vibration.enabled || !nativeModule) return;
+  if (el?.closest?.('.appearance-vibration')) return; // its own controls give a preview buzz instead
+  nativeModule.vibrateTap(vibration.strength);
+}
+
+function setVibration(next, { preview = false } = {}) {
+  vibration = { ...vibration, ...next };
+  saveVibration(vibration);
+  if (preview && vibration.enabled) nativeModule?.vibrateTap(vibration.strength);
+}
+
 const headerTransparencyLabel = (v) => {
   const n = store.normalizeHeaderTransparency(v);
   return `${n}% — ${n < 25 ? 'mostly solid' : n < 60 ? 'balanced glass' : 'very clear glass'}`;
@@ -3015,6 +3053,7 @@ ${(() => {
         </label>`).join('')}
       </div>
     </fieldset>
+    ${isNativeApp() ? vibrationFields() : ''}
     <div class="field">
       <label for="s-theme">Light or dark</label>
       <div class="select-control select-plain">
@@ -5789,6 +5828,20 @@ function wireSettingsContentEvents() {
       render();
     })
   );
+  const vibrationOn = document.getElementById('s-vibration-on');
+  vibrationOn?.addEventListener('change', () => {
+    setVibration({ enabled: vibrationOn.checked }, { preview: true });
+    const strengths = document.getElementById('s-vibration-strengths');
+    if (strengths) strengths.hidden = !vibrationOn.checked;
+  });
+  document.querySelectorAll('input[name="s-vibration-strength"]').forEach((radio) =>
+    radio.addEventListener('change', () => {
+      if (!radio.checked) return;
+      // No redraw: just move the highlight, so the row doesn't jump.
+      document.querySelectorAll('input[name="s-vibration-strength"]').forEach((r) => r.closest('.segmented-option')?.classList.toggle('is-selected', r === radio));
+      setVibration({ strength: radio.value }, { preview: true });
+    })
+  );
   const glass = document.getElementById('s-header-glass');
   if (glass) {
     // Live preview while dragging; saved (once) when the slider is released.
@@ -6156,6 +6209,8 @@ document.addEventListener('focusout', () => {
 
 initPickerGlobalListeners();
 window.addEventListener('hashchange', onHashChange);
+// Touch press / switch feedback for every phone and tablet (website and app).
+if (typeof document !== 'undefined') installPressFeedback(document, { reduced: motionReduced, onTap: vibrateForTap });
 if (isNativeApp()) initNativeApp();
 render();
 dismissBootScreen();
