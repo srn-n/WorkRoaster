@@ -75,8 +75,13 @@ Break any of these and the change is wrong, however good it looks.
 ### Android
 10. **Never change the app ID** (`com.simplymadestudio.workroaster`) or the
     upload signing setup. Play would treat it as a different app.
-11. Signing keys and passwords **never** go in the repo (it's public). They
-    live in GitHub Actions secrets only (see `docs/android-release.md`).
+11. Signing keys and passwords **never** go in the repo (it's public). The
+    upload key lives in the git-ignored `.signing\` folder on the owner's
+    computer (`upload.jks` + `keystore.properties`, alias
+    `workroaster-upload`); releases are signed there. Never print the
+    passwords, never move the key out of `.signing\`, delete any temporary
+    copy after signing. CI signing via the four `WORKROASTER_*` secrets is
+    optional (see `docs/android-release.md`).
 12. Android needs target SDK 36 for Play (in place). Don't downgrade Capacitor
     below 8.
 
@@ -96,7 +101,7 @@ Break any of these and the change is wrong, however good it looks.
 ```bash
 npm ci                 # install (CI uses: npm ci --ignore-scripts)
 npm run dev            # Vite dev server
-npm test               # unit tests (node:test), currently 100, must all pass
+npm test               # unit tests (node:test), currently 109, must all pass
 npm run build          # production build → dist/ (adds CSP meta, version)
 npm run preview        # serve dist/ locally (port 4173)
 npx cap sync android   # copy dist/ into the Android project
@@ -105,7 +110,8 @@ node tests/perf/perf-check.mjs   # optional perf smoke (Playwright)
 
 Android builds run in GitHub Actions, not locally (`.github/workflows/build-android-apk.yml`):
 - a push to `main` → **debug APK** artifact (version `0.0.1-debug.<run>`);
-- a tag `v<package.json version>` → **signed release AAB + APK**.
+- a tag `v<package.json version>` → **release AAB + APK**, unsigned (plus
+  `apksigner.jar` and `SHA256SUMS.txt`) unless the signing secrets are set.
 
 ## 4. Repo map
 
@@ -133,7 +139,8 @@ src/ids.js, style-heal.js
 src/styles.css          # all styles; themes; safe-area rules; :where(html.is-native) app rules
 tests/unit/*.test.mjs   # unit tests (incl. android-promises, ids-injection, platform)
 docs/data-model.md      # storage keys, record/settings shapes, migration rules — READ before touching data
-docs/android-release.md # signing key, secrets, tagging, Play Console steps, device checklist
+docs/android-release.md # upload key, local signing, tagging, Play Console steps, device checklist
+release/store/          # Play listing: LISTING.md (text + App content answers), icon, feature graphic, screenshots
 docs/updates/           # one Markdown note per change (required, see the end of this file)
 android/                # committed Capacitor Android project
   app/src/main/AndroidManifest.xml        # promises: no INTERNET (tools:node="remove"), allowBackup=false, taskAffinity=""
@@ -241,14 +248,20 @@ CHANGELOG.md            # user-facing changes, newest first
   2. Push.
   3. `git tag vX.Y.Z && git push origin vX.Y.Z`. The workflow refuses a tag
      that doesn't match `package.json`.
-  4. Upload the `.aab` artifact to Play Console.
+  4. Download the release artifact, check `SHA256SUMS.txt`, sign the AAB
+     (jarsigner) and APK (apksigner) with `.signing\upload.jks`, verify.
+  5. Deliver to `C:\Working Projects\WorkRoasterApp\`: `WorkRoaster-X.Y.Z.aab`,
+     `WorkRoaster-X.Y.Z.apk`, `PLAY-STORE-UPLOAD.md` (version, code,
+     checksums, certificate) and `store\`. Delete the previous version's
+     files, the CI zip and temporary key copies.
+  6. Upload the `.aab` to Play Console.
 - **Play account:** personal, so the first release needs a **closed test with
   ≥12 testers opted in for 14 consecutive days** before applying for
   production. Full steps: `docs/android-release.md`.
 
 ## 8. Current status (keep this section up to date)
 
-_Last updated: 2026-11-13_
+_Last updated: 2026-11-14_
 
 **Done**
 - Website live; security audit (29 Oct) fixes shipped; phases 1–23 of
@@ -270,6 +283,13 @@ _Last updated: 2026-11-13_
   works even when the phone's touch vibration is off. Adds the `VIBRATE`
   permission.
 
+- 14 Nov: Play-ready release flow (same as Bouncy Calculator). The upload
+  key is in `.signing\` (git-ignored, alias `workroaster-upload`, RSA 4096,
+  valid to 2054). Tagged builds are unsigned by default and signed locally.
+  Store listing, icon, feature graphic and 8 screenshots in
+  `release/store/`. Fixed two squeezed form rows on 360–420px phones
+  (date + pay cycle; start + working time).
+
 **Next (in order)**
 1. Push and check the CI build (new Android resources and plugin). Then
    install the debug APK on a real phone and run the device checklist in
@@ -277,11 +297,10 @@ _Last updated: 2026-11-13_
    press-bounce and vibration items.
 2. Binary-level check of the built APK: merged manifest, exported
    components, signature, dex strings.
-3. Create the upload keystore and add the 4 GitHub secrets, then tag `v0.0.1`
-   for the first signed release. The version may be bumped to 0.0.2 first;
-   that's the owner's call.
-4. Play listing assets: feature graphic 1024×500, screenshots, descriptions.
-   Recruit 15–20 closed testers.
+3. Tag `v0.0.1`, sign the artifact locally and fill
+   `C:\Working Projects\WorkRoasterApp\` (see §7).
+4. Create the app in Play Console from `release/store/LISTING.md`, upload the
+   AAB to Closed testing. Recruit 15–20 closed testers.
 5. Closed test (14 days), then the production application.
 
 **Known, accepted, or deferred**
@@ -319,6 +338,7 @@ _Last updated: 2026-11-13_
 | 12 Nov 2026 | Tax estimate: optional, off by default, 7 countries, estimates only, current-year rates with sources shown in-app. |
 | 12 Nov 2026 | Clock-in reminder: the owner approved the Android notifications permission. Local only; exact alarms removed for Play policy. |
 | 2 Nov 2026 | Third-party security report reviewed. No minimatch override (breaks glob, no shipped code affected). Trusted Types passthrough rejected (it gives no protection). HSTS is already sent by Vercel. |
+| 14 Nov 2026 | Releases are signed locally with the key in `.signing\` (like Bouncy Calculator); CI builds unsigned unless the optional secrets are set. Play files live in `C:\Working Projects\WorkRoasterApp`. |
 | 13 Nov 2026 | Tap vibration is app-only, off by default, per phone (not in backups), and uses the vibrator directly so it works with the phone's touch vibration off. `VIBRATE` added to the pinned permission list. |
 
 ---

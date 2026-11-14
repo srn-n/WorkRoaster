@@ -2,8 +2,9 @@
 
 All notable changes to WorkRoaster are listed here.
 
-## Unreleased — 2026-11-13
+## Unreleased — 2026-11-14
 
+- **Small phones:** on screens 360–420px wide, the date and its pay cycle, and the starting time and working time, now sit one under the other. Before, the pay cycle was squeezed into a narrow column and the minutes box was too small to show "30".
 - **Springy taps on phones and tablets:** buttons, tabs and option cards now squeeze and bounce back under your finger, like they do with a mouse, even on a quick tap. Switching an option or ticking a box gives it a small pop. (A phone-only rule had been cancelling the press.) Settings → Appearance → Motion and your device's reduce-motion setting still apply.
 - **Android app — vibration (optional, off by default):** Settings → Appearance → Vibration. Choose Light, Medium or Strong. It works even when your phone's own touch vibration is off; it stays off if vibration is switched off for the whole phone. Saved on that phone only.
 

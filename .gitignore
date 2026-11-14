@@ -3,3 +3,9 @@ dist/
 .DS_Store
 *.local
 .vscode/
+
+# Play upload key and its passwords (never commit)
+.signing/
+*.jks
+*.keystore
+keystore.properties

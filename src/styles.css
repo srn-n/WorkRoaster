@@ -2154,6 +2154,17 @@ button.calendar-day { border: 0; margin: 0; font-family: inherit; text-align: le
   .form-panel .grid-2 { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* Date + pay cycle: the date box and its calendar button need ~200px, which
+   left the pay-cycle preview a squeezed column on 360–420px phones. Stack. */
+@media (max-width: 420px) {
+  .form-panel .date-cycle-grid { grid-template-columns: minmax(0, 1fr); }
+}
+/* Same squeeze for starting time + working time: at 360px the hour and
+   minute boxes were 26px wide and "30" showed as "3". Stack below 400px. */
+@media (max-width: 399px) {
+  .form-panel .start-duration-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ------------------------------------------------------------------ */
 /* Printing the page (browser Print / Save as PDF): print the data —   */
 /* stats, records and insights — not the entry form, calendar,         */

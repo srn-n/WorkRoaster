@@ -1,7 +1,7 @@
 # Android release guide
 
 How WorkRoaster goes from this repo to Google Play. Do the one-time setup
-once, then every release is: tag → download → upload.
+once, then every release is: tag → download → sign → upload.
 
 ## How the build works
 
@@ -14,10 +14,14 @@ GitHub Actions does all of this (`.github/workflows/build-android-apk.yml`):
 | You push… | You get (Actions → the run → Artifacts) |
 |---|---|
 | a commit to `main` | `WorkRoaster-debug-APK`: install on your own phone to test |
-| a tag like `v0.0.1` | `WorkRoaster-0.0.1-release`: `app-release.aab` (for Play) + `app-release.apk` |
+| a tag like `v0.0.1` | `WorkRoaster-0.0.1-release`: `app-release.aab` (for Play), the APK, `apksigner.jar` and `SHA256SUMS.txt` |
 
 Every build runs the unit tests first, and checks the finished APK has no
-`INTERNET` permission. A failed check stops the build.
+`INTERNET` permission and isn't debuggable. A failed check stops the build.
+
+The release is **unsigned** unless the four `WORKROASTER_*` signing secrets
+are set (option B below). The default is option A: you sign on your own
+computer, the same way as Bouncy Calculator, and the key never leaves it.
 
 ## One-time setup: the upload key
 
@@ -26,37 +30,41 @@ the app for phones with its own app key (Play App Signing), so if the upload
 key is ever lost, it can be reset through Play Console support. Still treat it
 like a password.
 
-1. **Create the key** (PowerShell; `keytool` comes with Java or Android Studio).
-   Keep it **outside** the repo folder:
+### A. Sign locally (default)
 
-   ```powershell
-   mkdir C:\Keys
-   keytool -genkeypair -v -keystore C:\Keys\workroaster-upload.jks -alias workroaster-upload -keyalg RSA -keysize 2048 -validity 10000
-   ```
+The key lives in the repo folder but is git-ignored (`.signing/`, `*.jks`,
+`keystore.properties`; a unit test fails if those lines go missing):
 
-   It asks for a keystore password and your name/organisation (e.g.
-   "Simply Made Studio"). Use the same password for the key when asked.
+```
+C:\Working Projects\WorkRoasterFolder\.signing\
+  upload.jks             the upload key (alias "workroaster-upload", RSA 4096, valid to 2054)
+  keystore.properties    storeFile, storePassword, keyAlias, keyPassword
+```
 
-2. **Back it up**: copy `workroaster-upload.jks` and the password into your
-   password manager or another safe place. Never commit it: the repo is public.
+- **Back both files up** (password manager or an encrypted drive). Losing
+  them means a key reset through Play support before the next update.
+- Never print the passwords, never move the key out of `.signing\`, and
+  delete any temporary copy made for signing.
+- `git status` must never show `.signing`. If it does, stop and fix
+  `.gitignore` before committing anything.
 
-3. **Turn it into text for GitHub:**
+### B. Sign in CI (optional)
 
-   ```powershell
-   [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\Keys\workroaster-upload.jks")) | Set-Clipboard
-   ```
+Put the same key into four repository secrets: GitHub → WorkRoaster →
+Settings → Secrets and variables → Actions → *New repository secret*:
 
-4. **Add four repository secrets**: GitHub → WorkRoaster → Settings →
-   Secrets and variables → Actions → *New repository secret*:
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\Working Projects\WorkRoasterFolder\.signing\upload.jks")) | Set-Clipboard
+```
 
-   | Name | Value |
-   |---|---|
-   | `WORKROASTER_KEYSTORE_BASE64` | the clipboard text from step 3 |
-   | `WORKROASTER_KEYSTORE_PASSWORD` | the keystore password |
-   | `WORKROASTER_KEY_ALIAS` | `workroaster-upload` |
-   | `WORKROASTER_KEY_PASSWORD` | the key password (same as above if you reused it) |
+| Name | Value |
+|---|---|
+| `WORKROASTER_KEYSTORE_BASE64` | the clipboard text |
+| `WORKROASTER_KEYSTORE_PASSWORD` | `storePassword` from keystore.properties |
+| `WORKROASTER_KEY_ALIAS` | `workroaster-upload` |
+| `WORKROASTER_KEY_PASSWORD` | `keyPassword` |
 
-   Secrets can't be read back by anyone, including you, and never appear in logs.
+With them set, tagged builds come out signed and step 4 below is skipped.
 
 ## Testing on your phone (debug APK)
 
@@ -85,8 +93,26 @@ first**, uninstall the debug app, then install from Play and restore.
    ```
 
    A tag that doesn't match `package.json` stops the build with a clear message.
-3. Download the `WorkRoaster-0.0.1-release` artifact and upload `app-release.aab`
-   in Play Console (see below).
+3. Download the `WorkRoaster-<version>-release` artifact and check it:
+   `sha256sum -c SHA256SUMS.txt`.
+4. **Sign** (option A) with the key in `.signing\` (alias `workroaster-upload`):
+
+   ```
+   jarsigner -keystore upload.jks -sigalg SHA256withRSA -digestalg SHA-256 app-release.aab workroaster-upload
+   java -jar apksigner.jar sign --ks upload.jks --ks-key-alias workroaster-upload --out WorkRoaster-<version>.apk app-release-unsigned.apk
+   ```
+
+   Rename the AAB to `WorkRoaster-<version>.aab` and delete the `.idsig` file
+   apksigner leaves behind.
+5. **Verify:** `jarsigner -verify` says "jar verified" (a self-signed
+   certificate warning is normal); `apksigner verify --print-certs` shows the
+   upload certificate SHA-256 recorded in `PLAY-STORE-UPLOAD.md`; the package
+   is `com.simplymadestudio.workroaster` with the right version code and name.
+6. **Deliver** to `C:\Working Projects\WorkRoasterApp\`: the AAB, the APK and
+   an updated `PLAY-STORE-UPLOAD.md` (version, code, checksums). Delete the
+   previous version's AAB/APK, the downloaded CI zip and every temporary copy
+   of the key.
+7. Upload the AAB in Play Console (below).
 
 ## Google Play Console (first release)
 
@@ -94,10 +120,10 @@ first**, uninstall the debug app, then install from Play and restore.
 2. **App signing**: accept Play App Signing (Google-generated app key) when you
    upload the first `.aab`.
 3. **Store listing**:
-   - App icon: 512 × 512 PNG (`assets/icon-only.png` resized).
-   - Feature graphic: 1024 × 500.
-   - Phone screenshots: 2–8.
-   - Short description (80 characters) and full description.
+   - Everything is ready in `C:\Working Projects\WorkRoasterApp\store\`
+     (mirrored in this repo under `release/store/`): `LISTING.md` with the
+     text and every App content answer, `icon-512.png`, the
+     `feature-graphic-1024x500.png` and phone screenshots (1080 × 2160).
    - Category: Productivity.
 4. **App content** forms:
    - Privacy policy: `https://www.simplymadestudio.net/privacy#workroaster`

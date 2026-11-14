@@ -1,9 +1,13 @@
 name: Build WorkRoaster Android app
 
 # Push to main  → a debug APK to install on your own phone for testing.
-# Push a v* tag → a signed release: the .aab for Google Play plus a signed .apk.
+# Push a v* tag → a release build: the .aab for Google Play plus an .apk.
 #   The tag must match "version" in package.json, e.g. for 0.0.1:
 #   git tag v0.0.1 && git push origin v0.0.1
+#   - With the four WORKROASTER_* signing secrets set, CI signs them.
+#   - Without them (the default), CI builds them UNSIGNED, adds apksigner.jar
+#     and SHA256SUMS.txt, and you sign locally with the key in .signing/
+#     (docs/android-release.md). The key never has to leave your computer.
 #
 # Every action is pinned to a full commit SHA (the comment shows its version):
 # release builds handle the signing key, so a moved or hijacked tag on a
@@ -22,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      HAS_SIGNING: ${{ secrets.WORKROASTER_KEYSTORE_BASE64 != '' }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -88,22 +93,18 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon assembleDebug -PversionCode=${{ steps.version.outputs.code }} -PversionName=${{ steps.version.outputs.name }}
 
-      - name: Restore the upload key
-        if: env.IS_RELEASE == 'true'
+      - name: Restore the upload key (only when the signing secrets are set)
+        if: env.IS_RELEASE == 'true' && env.HAS_SIGNING == 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.WORKROASTER_KEYSTORE_BASE64 }}
-        run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::The WORKROASTER_KEYSTORE_BASE64 secret is missing (see docs/android-release.md)."
-            exit 1
-          fi
-          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.jks"
+        run: echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.jks"
 
-      - name: Build signed release (AAB for Play + APK)
+      - name: Build release (AAB for Play + APK)
         if: env.IS_RELEASE == 'true'
         working-directory: android
         env:
-          WORKROASTER_KEYSTORE_PATH: ${{ runner.temp }}/upload.jks
+          # Empty without the secrets: build.gradle then leaves the release unsigned.
+          WORKROASTER_KEYSTORE_PATH: ${{ env.HAS_SIGNING == 'true' && format('{0}/upload.jks', runner.temp) || '' }}
           WORKROASTER_KEYSTORE_PASSWORD: ${{ secrets.WORKROASTER_KEYSTORE_PASSWORD }}
           WORKROASTER_KEY_ALIAS: ${{ secrets.WORKROASTER_KEY_ALIAS }}
           WORKROASTER_KEY_PASSWORD: ${{ secrets.WORKROASTER_KEY_PASSWORD }}
@@ -117,7 +118,7 @@ jobs:
 
       - name: Check the finished app keeps its promises
         run: |
-          if [ "$IS_RELEASE" = "true" ]; then APK=android/app/build/outputs/apk/release/app-release.apk; else APK=android/app/build/outputs/apk/debug/app-debug.apk; fi
+          if [ "$IS_RELEASE" = "true" ]; then APK="$(ls android/app/build/outputs/apk/release/app-release*.apk | head -1)"; else APK=android/app/build/outputs/apk/debug/app-debug.apk; fi
           BUILD_TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)"
           "$BUILD_TOOLS/aapt2" dump badging "$APK" | grep -E "^package:|targetSdkVersion|^sdkVersion"
           "$BUILD_TOOLS/aapt2" dump permissions "$APK" | tee permissions.txt
@@ -131,12 +132,24 @@ jobs:
             case " $ALLOWED " in *" $p "*) ;; *) echo "::warning::Unexpected permission in the APK: $p (check AGENTS.md rule 3)";; esac
           done
           if [ "$IS_RELEASE" = "true" ]; then
-            "$BUILD_TOOLS/apksigner" verify --print-certs "$APK" | grep -E "Signer #1 certificate (DN|SHA-256)"
+            if [ "$HAS_SIGNING" = "true" ]; then
+              "$BUILD_TOOLS/apksigner" verify --print-certs "$APK" | grep -E "Signer #1 certificate (DN|SHA-256)"
+            fi
             if "$BUILD_TOOLS/aapt2" dump badging "$APK" | grep -q "application-debuggable"; then
               echo "::error::The release APK is debuggable."
               exit 1
             fi
           fi
+
+      - name: Collect release files (with apksigner.jar and checksums for signing locally)
+        if: env.IS_RELEASE == 'true'
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/bundle/release/*.aab out/
+          cp android/app/build/outputs/apk/release/*.apk out/
+          BUILD_TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)"
+          cp "$BUILD_TOOLS/lib/apksigner.jar" out/
+          (cd out && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
 
       - name: Upload debug APK
         if: env.IS_RELEASE != 'true'
@@ -152,8 +165,6 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: WorkRoaster-${{ steps.version.outputs.name }}-release
-          path: |
-            android/app/build/outputs/bundle/release/app-release.aab
-            android/app/build/outputs/apk/release/app-release.apk
+          path: out/
           if-no-files-found: error
           retention-days: 30

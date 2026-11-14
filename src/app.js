@@ -1682,7 +1682,7 @@ function renderForm() {
 
         <fieldset class="field-group">
           <legend>Date</legend>
-          <div class="grid grid-2">
+          <div class="grid grid-2 date-cycle-grid">
             <div class="field">
               <label for="f-date">Date</label>
               <div class="date-field-row">
@@ -1724,7 +1724,7 @@ function renderForm() {
             </div>
           </div>`
               : `
-          <div class="grid grid-2">
+          <div class="grid grid-2 start-duration-grid">
             <div class="field">
               <label for="f-start">${icon('clock', 'icon-sm')}Starting time</label>
               ${timeFieldMarkup('f-start', editingRecord ? editingRecord.start : d.startTime, 'Open time picker for starting time')}

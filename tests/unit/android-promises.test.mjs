@@ -88,3 +88,15 @@ test('one version for the website and the app (package.json)', () => {
   assert.match(read('vite.config.js'), /__APP_VERSION__/);
   assert.match(read('.github/workflows/build-android-apk.yml'), /does not match package\.json version/);
 });
+
+test('the upload key can never be committed (the repo is public)', () => {
+  const ignore = read('.gitignore').split(/\r?\n/);
+  for (const pattern of ['.signing/', '*.jks', '*.keystore', 'keystore.properties']) {
+    assert.ok(ignore.includes(pattern), `.gitignore must list ${pattern}`);
+  }
+  // A release without the CI secrets is built unsigned, never signed with a stand-in key.
+  const workflow = read('.github/workflows/build-android-apk.yml');
+  assert.match(workflow, /HAS_SIGNING: \$\{\{ secrets\.WORKROASTER_KEYSTORE_BASE64 != '' \}\}/);
+  assert.match(workflow, /apksigner\.jar/);
+  assert.match(workflow, /SHA256SUMS\.txt/);
+});
