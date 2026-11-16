@@ -9,3 +9,7 @@ dist/
 *.jks
 *.keystore
 keystore.properties
+
+# Agent brief: kept only on the owner's computer, never committed
+AGENTS.md
+CLAUDE.md

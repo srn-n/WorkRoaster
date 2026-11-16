@@ -3214,6 +3214,9 @@ input[type="date"], input[type="time"] { accent-color: var(--accent); }
 }
 .clock-bar-text { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .clock-bar-actions { display: inline-flex; gap: 6px; }
+.clock-bar-note { flex-basis: 100%; order: 3; font-size: 0.82rem; color: var(--text-secondary); }
+.clock-bar-note .text-link-btn { font-size: inherit; }
+.settings-notifications .field-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 6px; }
 .clock-bar.is-running { color: var(--text-primary); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
 .clock-bar.is-overdue { border-color: #c2410c; background: color-mix(in srgb, #c2410c 10%, var(--surface, transparent)); }
 .clock-pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; animation: clock-pulse 1.6s ease-in-out infinite; }

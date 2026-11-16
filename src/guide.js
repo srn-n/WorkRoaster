@@ -198,11 +198,20 @@ export const GUIDE_SECTIONS = [
       },
       {
         title: 'Clocking in live',
-        keywords: 'clock in clock out timer live start stop shift running reminder notification 12 hours',
+        keywords: 'clock in clock out timer live start stop shift running reminder notification 12 hours status bar panel seconds',
         body: `<p>Working now? Press <strong>Clock in</strong> above the current pay cycle. A timer runs (it keeps going if you reload or close ${IN_APP ? 'the app' : 'the page'}) and each profile has its own.</p>
           <p>Press <strong>Clock out</strong> when you finish: the record form is filled in with the date, the start time and your working time (or end time). Check the job, break and pay, then save it as usual — nothing is recorded until you do. <em>Cancel</em> stops the timer without saving.</p>
-          <p>If you're still clocked in after <strong>12 hours</strong>, WorkRoaster reminds you: ${IN_APP ? 'a notification on your phone, even when the app is closed (Android asks once for permission to show it)' : 'a browser notification while WorkRoaster is open, if you allow it'}, and a warning above the pay cycle.</p>`,
+          <p>If you're still clocked in after <strong>12 hours</strong>, WorkRoaster reminds you: ${IN_APP ? 'a notification on your phone, even when the app is closed (Android asks once for permission to show it)' : 'a browser notification while WorkRoaster is open, if you allow it'}, and a warning above the pay cycle.</p>${IN_APP ? `
+          <p><strong>While you're clocked in</strong>, a small WorkRoaster icon sits in your status bar. Pull down the notification panel to see the time counting up, second by second, with a <em>Clock out</em> button. For your attention, it stays there until you clock out: swiping it away just brings it back. If you don't see it, turn notifications on in <strong>Settings → General → Notifications</strong>.</p>` : ''}`,
       },
+      ...(IN_APP ? [{
+        title: 'Home-screen widgets',
+        keywords: 'widget home screen clock in timer pay cycle summary earned hours',
+        body: `<p>Two WorkRoaster widgets can sit on your home screen. Long-press an empty spot on the home screen, choose <strong>Widgets</strong>, then <strong>WorkRoaster</strong>:</p>
+          <ul><li><strong>Clock in</strong> — clock in with one tap and watch the time count up, second by second. <em>Clock out</em> opens WorkRoaster with the record ready to check and save.</li>
+          <li><strong>Pay cycle</strong> — the current pay cycle's dates, what you've earned so far and the hours worked (and the after-tax estimate, if it's on). It updates whenever WorkRoaster changes; tap it to open the app.</li></ul>
+          <p>Both follow the profile that's open in WorkRoaster. They show figures only on your own home screen; nothing leaves your phone.</p>`,
+      }] : []),
       {
         title: 'Breaks: gross vs working time',
         keywords: 'break unpaid break net paid time gross working minutes lunch',

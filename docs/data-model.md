@@ -610,6 +610,18 @@ or `strong`. Per phone, not per profile, and **not** in backups (how a phone
 buzzes belongs to that phone). Missing or broken reads as the default (off).
 See `src/vibration.js`.
 
+## Android clock mirror (app only) — SharedPreferences `workroaster_clock`
+
+Not in `localStorage`: Android's private app preferences, so the "Clocked
+in" notification and the home-screen widgets work while the app is closed
+(`android/.../ClockStore.java`). Holds `started_at` (ms, 0 = not clocked
+in), `profile_id`, a one-shot `pending_action` (`clockOut`) and the
+pay-cycle widget's display strings (range, earned, hours, net). The web
+app's per-profile `…_clock` key stays the source of truth: the app writes
+the mirror when its clock changes (`pushNativeState()` in `app.js`), and on
+start/return adopts a clock-in started from the widget for the same
+profile. Not in backups; `allowBackup="false"` keeps it off Google's cloud.
+
 ## Backups (JSON import)
 
 `storage.js#parseBackup` validates the whole file **before** anything is

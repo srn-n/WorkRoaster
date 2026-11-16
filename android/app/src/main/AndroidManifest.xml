@@ -50,6 +50,32 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Clocked-in notification: puts it back if swiped away, and after a
+             restart or an update. Not exported: only the app's own
+             PendingIntents and the system reach it. -->
+        <receiver android:name=".ClockReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Home-screen widgets. Android requires widget providers to be
+             exported; they only handle the standard APPWIDGET_UPDATE broadcast
+             (a protected broadcast only the system can send). -->
+        <receiver android:name=".ClockWidget" android:exported="true" android:label="@string/widget_clock_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_clock_info" />
+        </receiver>
+        <receiver android:name=".SummaryWidget" android:exported="true" android:label="@string/widget_summary_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_summary_info" />
+        </receiver>
     </application>
 
     <!-- Short buzz on taps when the person turns it on (Settings → Appearance). -->

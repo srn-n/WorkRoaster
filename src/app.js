@@ -2403,6 +2403,7 @@ function renderClockBar() {
           <span class="clock-pulse" aria-hidden="true"></span>
           <span>${overdue ? '<strong>Still clocked in after 12+ hours.</strong> Forgot to clock out? ' : ''}Clocked in at ${esc(when)} · <b class="tnum" data-clock-elapsed>${esc(calc.formatDuration(clockMinutes(clock)))}</b></span>
         </span>
+        ${isNativeApp() && notificationsOn === false ? `<span class="clock-bar-note">Notifications are off, so the clocked-in timer can't show in your notification panel. <button class="text-link-btn" id="btn-clock-notif" type="button">Turn on</button></span>` : ''}
         <span class="clock-bar-actions">
           <button class="btn primary small" id="btn-clock-out" type="button">Clock out</button>
           <button class="btn secondary small" id="btn-clock-cancel" type="button" aria-label="Cancel this clock-in without saving">Cancel</button>
@@ -2456,7 +2457,7 @@ function clockIn() {
     return;
   }
   if (isNativeApp()) {
-    nativeModule?.scheduleClockReminder(startedAt + CLOCK_REMINDER_MS);
+    askForClockNotifications(startedAt);
   } else if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
     Notification.requestPermission().catch(() => {});
   }
@@ -2467,6 +2468,138 @@ function clockIn() {
 function clearClock() {
   store.saveClock(null);
   if (isNativeApp()) nativeModule?.cancelClockReminder();
+}
+
+// ---------------------------------------------------------------------
+// Android: "Clocked in" notification, home-screen widgets, notification
+// permission (native.js → ClockPlugin.java). The web app's per-profile
+// clock stays the source of truth; Android only mirrors it, except that a
+// widget can clock in while the app is closed (adopted below).
+// ---------------------------------------------------------------------
+/** true / false once known (app only); null = not known yet. */
+let notificationsOn = null;
+let lastClockPushed = null; // `${startedAt}|${profileId}` last sent to Android
+let lastSummaryPushed = null;
+
+/** The current pay cycle (today's), as the pay-cycle widget shows it. */
+function widgetSummary() {
+  const today = calc.todayString();
+  const cyc = calc.getCycleForDate(today, state.settings.payCycleLengthDays, state.settings.payCycleAnchor);
+  const records = state.records.filter((r) => r.date >= cyc.cycleStart && r.date <= cyc.cycleEnd);
+  const pay = calc.totalPay(records);
+  const minutes = calc.totalMinutes(records);
+  const t = cycleTax(pay);
+  return {
+    range: cyc.cycleLabel,
+    earned: money(pay),
+    hours: `${calc.formatDuration(minutes)} worked · ${records.length} record${records.length === 1 ? '' : 's'}`,
+    net: t && pay > 0 ? `≈ ${money(t.net)} after tax (estimate)` : '',
+  };
+}
+
+/** Mirror the clock and the pay-cycle figures to Android when they change.
+ *  Only local changes are pushed, so a widget clock-in made while the app
+ *  was in the background is never overwritten before it's adopted. */
+function pushNativeState() {
+  if (!nativeModule || lastClockPushed === null) return; // not reconciled yet
+  const clock = store.loadClock();
+  const key = `${clock ? clock.startedAt : 0}|${store.getActiveProfileId()}`;
+  if (key !== lastClockPushed) {
+    lastClockPushed = key;
+    nativeModule.clockSync(clock ? clock.startedAt : 0, store.getActiveProfileId());
+  }
+  try {
+    const summary = JSON.stringify(widgetSummary());
+    if (summary !== lastSummaryPushed) {
+      lastSummaryPushed = summary;
+      nativeModule.setWidgetSummary(JSON.parse(summary));
+    }
+  } catch {
+    /* the widget keeps its last figures */
+  }
+}
+
+/** On start, on return to the app, and after Clock out on the notification
+ *  or widget: adopt a widget clock-in, refresh the permission state, run a
+ *  pending clock-out. */
+async function syncNativeClock() {
+  if (!nativeModule) return;
+  const profileId = store.getActiveProfileId();
+  const native = await nativeModule.clockGet();
+  let changed = false;
+  if (native && native.startedAt > 0 && native.profileId === profileId && !store.loadClock()) {
+    if (store.saveClock({ startedAt: native.startedAt })) {
+      nativeModule.scheduleClockReminder(native.startedAt + CLOCK_REMINDER_MS);
+      changed = true;
+    }
+  }
+  const clock = store.loadClock();
+  lastClockPushed = `${clock ? clock.startedAt : 0}|${profileId}`;
+  nativeModule.clockSync(clock ? clock.startedAt : 0, profileId);
+  const enabled = await nativeModule.notificationsEnabled();
+  if (enabled !== notificationsOn) {
+    notificationsOn = enabled;
+    changed = true;
+  }
+  const action = await nativeModule.takeClockAction();
+  if (action === 'clockOut' && store.loadClock()) {
+    clockOut();
+    return;
+  }
+  if (changed) render();
+  else pushNativeState();
+}
+
+/** Clock-in in the app: ask for notification permission (Android 13+ shows
+ *  its prompt once), then show the clocked-in notification and set the
+ *  12-hour reminder. Says so plainly if notifications stay off. */
+async function askForClockNotifications(startedAt) {
+  if (!nativeModule) return;
+  const ok = await nativeModule.ensureNotificationPermission();
+  notificationsOn = ok;
+  if (ok) await nativeModule.scheduleClockReminder(startedAt + CLOCK_REMINDER_MS);
+  const clock = store.loadClock();
+  lastClockPushed = `${clock ? clock.startedAt : 0}|${store.getActiveProfileId()}`;
+  await nativeModule.clockSync(clock ? clock.startedAt : 0, store.getActiveProfileId());
+  if (!ok) showToast('Clocked in. Notifications are off, so the timer can’t show in your notification panel — turn them on in Settings → General.', 'error');
+  else render();
+}
+
+/** "Turn on": the system prompt if Android still offers it, otherwise this
+ *  app's notification settings (after "Don't allow", Android won't ask again). */
+async function turnOnNotifications() {
+  if (!nativeModule) return;
+  const ok = await nativeModule.ensureNotificationPermission();
+  notificationsOn = ok;
+  if (ok) {
+    const clock = store.loadClock();
+    if (clock) await nativeModule.scheduleClockReminder(clock.startedAt + CLOCK_REMINDER_MS);
+    lastClockPushed = null;
+    await syncNativeClock();
+    showToast('Notifications are on.');
+    return;
+  }
+  nativeModule.openNotificationSettings();
+}
+
+function notificationFields() {
+  const on = notificationsOn;
+  const status = on === true
+    ? '<strong>On.</strong> While you’re clocked in, a notification with a timer counting every second stays in your notification panel until you clock out, and you’ll get a reminder after 12 hours.'
+    : on === false
+      ? '<strong>Off.</strong> Turn them on to see the clocked-in timer in your notification panel and to get the 12-hour reminder.'
+      : 'Checking…';
+  return `
+    <fieldset class="field-group settings-notifications">
+      <legend>Notifications</legend>
+      <p class="field-help" id="s-notif-status" role="status">${status}</p>
+      <div class="field-actions">
+        ${on === true
+          ? '<button class="btn secondary small" id="s-notif-settings" type="button">Notification settings</button>'
+          : '<button class="btn primary small" id="s-notif-on" type="button">Turn on notifications</button>'}
+      </div>
+      <small class="field-help">Only for your own clock-in. WorkRoaster never sends anything; there’s no internet access.</small>
+    </fieldset>`;
 }
 
 function clockOut() {
@@ -2500,6 +2633,7 @@ function clockOut() {
 
 function wireClock() {
   document.getElementById('btn-clock-in')?.addEventListener('click', clockIn);
+  document.getElementById('btn-clock-notif')?.addEventListener('click', turnOnNotifications);
   document.getElementById('btn-clock-out')?.addEventListener('click', clockOut);
   document.getElementById('btn-clock-cancel')?.addEventListener('click', () => {
     if (!confirm('Cancel this clock-in? The running time won’t be saved.')) return;
@@ -3000,6 +3134,7 @@ ${(() => {
       <small class="field-help" id="s-currency-custom-help">Shown in front of every amount and in exports. Up to 6 characters; symbols like &lt; &gt; &amp; and quotes aren’t allowed.</small>
     </div>`;
     })()}
+    ${isNativeApp() ? notificationFields() : ''}
     <div class="field">
       <label for="s-default-start">Default starting time for new records</label>
       ${timeFieldMarkup('s-default-start', state.settings.defaults.startTime, 'Open time picker for default starting time', false)}
@@ -5828,6 +5963,8 @@ function wireSettingsContentEvents() {
       render();
     })
   );
+  document.getElementById('s-notif-on')?.addEventListener('click', turnOnNotifications);
+  document.getElementById('s-notif-settings')?.addEventListener('click', () => nativeModule?.openNotificationSettings());
   const vibrationOn = document.getElementById('s-vibration-on');
   vibrationOn?.addEventListener('change', () => {
     setVibration({ enabled: vibrationOn.checked }, { preview: true });
@@ -5978,7 +6115,10 @@ function wireEvents() {
   // through the same #record-form as always.
   wireClock();
   syncClockTimers();
-  if (isNativeApp()) useThemedPickersInApp();
+  if (isNativeApp()) {
+    useThemedPickersInApp();
+    pushNativeState();
+  }
   document.getElementById('btn-quick-add')?.addEventListener('click', () => {
     document.getElementById('form-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     document.getElementById('f-date')?.focus({ preventScroll: true });
@@ -6256,7 +6396,10 @@ function initNativeApp() {
     .then((native) => {
       nativeModule = native;
       native.onBackButton(handleBackButton);
+      native.onResume(() => { syncNativeClock(); });
+      native.onClockAction(() => { syncNativeClock(); });
       syncBrowserBarColor();
+      syncNativeClock();
     })
     .catch(() => { /* the app still works; only back/bar styling are lost */ });
 }

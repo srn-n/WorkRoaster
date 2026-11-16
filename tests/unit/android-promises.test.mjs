@@ -56,15 +56,51 @@ test('signing secrets come from the environment, never the repo', () => {
   assert.doesNotMatch(gradle, /storePassword\s+['"]/);
 });
 
-test('only the launcher screen is reachable from other apps, and it cannot be hijacked', () => {
-  const exported = [...manifest.matchAll(/android:exported="true"/g)].length;
-  assert.equal(exported, 1, 'only MainActivity may be exported');
+test('only the launcher and the two home-screen widgets are reachable from other apps', () => {
+  // Every component that declares android:exported, by name.
+  const components = [...manifest.matchAll(/<(activity|receiver|service|provider)\b([^>]*?)(\/?)>/g)].map((m) => {
+    const body = m[3] ? '' : manifest.slice(m.index + m[0].length, manifest.indexOf(`</${m[1]}>`, m.index));
+    return {
+      kind: m[1],
+      name: (m[2].match(/android:name="([^"]+)"/) || [])[1],
+      exported: /android:exported="true"/.test(m[2]),
+      filters: [...body.matchAll(/<intent-filter>([\s\S]*?)<\/intent-filter>/g)].map((f) => [...f[1].matchAll(/android:name="([^"]+)"/g)].map((a) => a[1])),
+    };
+  });
+  const exported = components.filter((c) => c.exported).map((c) => c.name).sort();
+  assert.deepEqual(exported, ['.ClockWidget', '.MainActivity', '.SummaryWidget']);
   assert.match(manifest, /android:taskAffinity=""/);
-  // No deep links / custom schemes: the only intent filter is the launcher.
-  const filters = [...manifest.matchAll(/<intent-filter>([\s\S]*?)<\/intent-filter>/g)].map((m) => m[1]);
-  assert.equal(filters.length, 1);
-  assert.match(filters[0], /android\.intent\.action\.MAIN/);
+  // The launcher is the activity's only way in: no deep links / custom schemes.
+  const main = components.find((c) => c.name === '.MainActivity');
+  assert.deepEqual(main.filters, [['android.intent.action.MAIN', 'android.intent.category.LAUNCHER']]);
   assert.doesNotMatch(manifest, /<data\b/);
+  // Widget providers listen to the system's widget update only (a protected
+  // broadcast), and don't add their own onReceive handling.
+  for (const name of ['ClockWidget', 'SummaryWidget']) {
+    assert.deepEqual(components.find((c) => c.name === `.${name}`).filters, [['android.appwidget.action.APPWIDGET_UPDATE']]);
+    const java = read(`android/app/src/main/java/com/simplymadestudio/workroaster/${name}.java`);
+    assert.doesNotMatch(java, /onReceive\(/, `${name} must not handle custom broadcasts`);
+  }
+  // The clock receiver is private: boot/update from the system, the rest via the app's own PendingIntents.
+  const receiver = components.find((c) => c.name === '.ClockReceiver');
+  assert.equal(receiver.exported, false);
+  assert.deepEqual(receiver.filters, [['android.intent.action.BOOT_COMPLETED', 'android.intent.action.MY_PACKAGE_REPLACED']]);
+});
+
+test('clock notification and widgets: immutable PendingIntents, nothing sent anywhere', () => {
+  const dir = 'android/app/src/main/java/com/simplymadestudio/workroaster/';
+  for (const f of ['ClockNotification', 'ClockWidget', 'ClockReceiver', 'ClockPlugin', 'ClockStore', 'SummaryWidget']) {
+    const java = read(`${dir}${f}.java`);
+    assert.doesNotMatch(java, /java\.net|HttpURLConnection|Socket|FLAG_MUTABLE\b/, f);
+    for (const m of java.matchAll(/PendingIntent\.get(?:Activity|Broadcast)\([^;]*;/g)) {
+      assert.match(m[0], /FLAG_IMMUTABLE/, `${f}: ${m[0]}`);
+    }
+  }
+  // Swiping the notification away brings it back while clocked in.
+  const n = read(`${dir}ClockNotification.java`);
+  assert.match(n, /setOngoing\(true\)/);
+  assert.match(n, /setDeleteIntent\(/);
+  assert.match(n, /setUsesChronometer\(true\)/);
 });
 
 test("Capacitor's internal file routes are closed in the app", () => {
@@ -99,4 +135,9 @@ test('the upload key can never be committed (the repo is public)', () => {
   assert.match(workflow, /HAS_SIGNING: \$\{\{ secrets\.WORKROASTER_KEYSTORE_BASE64 != '' \}\}/);
   assert.match(workflow, /apksigner\.jar/);
   assert.match(workflow, /SHA256SUMS\.txt/);
+});
+
+test('the agent brief stays on the owner\'s computer, not in the public repo', () => {
+  const ignore = read('.gitignore').split(/\r?\n/);
+  assert.ok(ignore.includes('AGENTS.md') && ignore.includes('CLAUDE.md'));
 });

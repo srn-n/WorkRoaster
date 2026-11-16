@@ -1,12 +1,13 @@
 # Update log
 
 One Markdown note per change, newest file name last (they sort by date).
-Together with [`AGENTS.md`](../../AGENTS.md), these notes are how any agent
-(Codex, Claude Code) or person continues the work without the original chat.
+Together with the owner's local `AGENTS.md` (kept on his computer, git-ignored,
+not in this repo), these notes are how any agent (Codex, Claude Code) or person
+continues the work without the original chat.
 
 **Required for every update.** Name the file `YYYY-MM-DD-short-title.md` (add
 `-2`, `-3` for several on one day), copy the template below, and keep it short
-and factual. Also update `AGENTS.md` §8 "Current status".
+and factual. Also update the local `AGENTS.md` §8 "Current status" (it is not committed).
 
 ## Template
 

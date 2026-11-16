@@ -2,7 +2,13 @@
 
 All notable changes to WorkRoaster are listed here.
 
-## Unreleased — 2026-11-14
+## Unreleased — 2026-11-16
+
+- **Android app — clocked-in notification:** while you're clocked in, a small WorkRoaster icon stays in the status bar, and the notification panel shows the time counting up second by second with a **Clock out** button. It stays until you clock out (swiping it away brings it back) and returns after a restart.
+- **Android app — notifications you can fix:** Settings → General → Notifications shows whether they're on, with **Turn on notifications** (Android's prompt, or its notification settings if you said no before). If they're off while you're clocked in, the clock bar says so with a **Turn on** link.
+- **Android app — home-screen widgets:** *Clock in* (one tap to clock in, with a live timer and Clock out) and *Pay cycle* (this cycle's dates, earned so far, hours and the after-tax estimate if it's on).
+
+## Earlier — 2026-11-14
 
 - **Small phones:** on screens 360–420px wide, the date and its pay cycle, and the starting time and working time, now sit one under the other. Before, the pay cycle was squeezed into a narrow column and the minutes box was too small to show "30".
 - **Springy taps on phones and tablets:** buttons, tabs and option cards now squeeze and bounce back under your finger, like they do with a mouse, even on a quick tap. Switching an option or ticking a box gives it a small pop. (A phone-only rule had been cancelling the press.) Settings → Appearance → Motion and your device's reduce-motion setting still apply.

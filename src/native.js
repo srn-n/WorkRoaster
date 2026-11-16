@@ -13,6 +13,52 @@ const SaveFile = registerPlugin('SaveFile');
 // App-local plugin (android/.../VibratePlugin.java): a short buzz on taps,
 // made with the phone's vibrator directly (see vibration.js).
 const Vibrate = registerPlugin('Vibrate');
+// App-local plugin (android/.../ClockPlugin.java): the "Clocked in"
+// notification and the two home-screen widgets.
+const Clock = registerPlugin('Clock');
+
+/** Tell Android the active profile's clock (0 = not clocked in). */
+export function clockSync(startedAt, profileId) {
+  return Clock.sync({ startedAt: Number(startedAt) || 0, profileId: String(profileId || 'default') }).catch(() => {});
+}
+/** What Android holds: a home-screen widget may have clocked in while the app was closed. */
+export async function clockGet() {
+  try {
+    const r = await Clock.get();
+    return { startedAt: Number(r.startedAt) || 0, profileId: String(r.profileId || 'default') };
+  } catch {
+    return null;
+  }
+}
+/** Figures for the pay-cycle widget. */
+export function setWidgetSummary(summary) {
+  return Clock.setSummary(summary).catch(() => {});
+}
+/** true / false, or null when it can't be told. */
+export async function notificationsEnabled() {
+  try {
+    return (await Clock.notificationStatus()).enabled === true;
+  } catch {
+    return null;
+  }
+}
+export function openNotificationSettings() {
+  return Clock.openNotificationSettings().catch(() => {});
+}
+/** "clockOut" once after Clock out was tapped on the notification or widget. */
+export async function takeClockAction() {
+  try {
+    return (await Clock.takeAction()).action || null;
+  } catch {
+    return null;
+  }
+}
+export function onClockAction(handler) {
+  Promise.resolve().then(() => Clock.addListener('action', () => handler())).catch(() => {});
+}
+export function onResume(handler) {
+  Promise.resolve().then(() => App.addListener('resume', () => handler())).catch(() => {});
+}
 
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {

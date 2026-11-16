@@ -129,7 +129,7 @@ jobs:
           # Anything beyond the local-reminder and vibration permissions is flagged for review.
           ALLOWED="android.permission.VIBRATE android.permission.POST_NOTIFICATIONS android.permission.RECEIVE_BOOT_COMPLETED android.permission.WAKE_LOCK com.simplymadestudio.workroaster.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
           for p in $(grep -o "uses-permission: name='[^']*'" permissions.txt | sed "s/.*name='//; s/'//"); do
-            case " $ALLOWED " in *" $p "*) ;; *) echo "::warning::Unexpected permission in the APK: $p (check AGENTS.md rule 3)";; esac
+            case " $ALLOWED " in *" $p "*) ;; *) echo "::warning::Unexpected permission in the APK: $p (see tests/unit/android-promises.test.mjs)";; esac
           done
           if [ "$IS_RELEASE" = "true" ]; then
             if [ "$HAS_SIGNING" = "true" ]; then

@@ -160,4 +160,7 @@ first**, uninstall the debug app, then install from Play and restore.
 - [ ] Settings → Tax estimate: turn on, try a few countries; amounts appear on the current cycle and in history.
 - [ ] Taps squeeze and spring back (Settings → Appearance → Motion: Bouncy); switching an option or ticking a box pops. With Android's "Remove animations" on, nothing moves (by design).
 - [ ] Settings → Appearance → Vibration: off by default. Turn on → one buzz; Light / Medium / Strong each feel different; taps buzz once. Turn Android's own *touch vibration* off: WorkRoaster still buzzes. Turn it off in WorkRoaster: silent.
+- [ ] Clock in: a small WorkRoaster icon appears in the status bar; the panel shows "Clocked in" with a timer counting seconds (expand it for the large timer). Swipe it away: it comes back. Restart the phone while clocked in: it comes back. **Clock out** on it opens the app with the record filled in.
+- [ ] Settings → General → Notifications: with notifications denied it says **Off**; **Turn on notifications** shows Android's prompt (or opens Android's notification settings after a refusal); back in the app it says **On**.
+- [ ] Widgets (long-press home screen → Widgets → WorkRoaster): *Clock in* clocks in from the home screen with a live timer, and the app shows the clock-in when opened; *Pay cycle* shows this cycle's dates, earned and hours, and updates after saving a record. Both look right in light and dark mode.
 - [ ] Settings → Apps → WorkRoaster → Permissions shows **only Notifications** (vibration needs no prompt and isn't listed there).
