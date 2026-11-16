@@ -2,7 +2,7 @@
 
 All notable changes to WorkRoaster are listed here.
 
-## Unreleased — 2026-11-16
+## 0.0.2 — 2026-11-16
 
 - **Android app — clocked-in notification:** while you're clocked in, a small WorkRoaster icon stays in the status bar, and the notification panel shows the time counting up second by second with a **Clock out** button. It stays until you clock out (swiping it away brings it back) and returns after a restart.
 - **Android app — notifications you can fix:** Settings → General → Notifications shows whether they're on, with **Turn on notifications** (Android's prompt, or its notification settings if you said no before). If they're off while you're clocked in, the clock bar says so with a **Turn on** link.
