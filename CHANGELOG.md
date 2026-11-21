@@ -2,7 +2,7 @@
 
 All notable changes to WorkRoaster are listed here.
 
-## Unreleased — 2026-11-21
+## 0.0.3 — 2026-11-21
 
 - **Overtime after a daily limit:** a job paid by the hour can count time over a daily limit (for example 8 hours, your workplace's rule) as overtime — turn it on when adding a job or by editing one. When a shift goes over, WorkRoaster asks for the overtime rate for the extra time and adds it to the pay (8h × $30 + 2h × $45 = $330). The rate is remembered for next time, and old records never change.
 - **Every box matches your theme:** the custom weekend adjustment type, the job editor's rule types, the salary break, Light or dark, the Guide's examples and the pay-cycle start date now use WorkRoaster's own themed pickers instead of the phone's or browser's plain ones. Yes/no questions and renames now appear in a themed dialog too.
