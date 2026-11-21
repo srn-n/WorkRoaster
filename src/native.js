@@ -36,10 +36,30 @@ export function setWidgetSummary(summary) {
 }
 /** true / false, or null when it can't be told. */
 export async function notificationsEnabled() {
+  const s = await notificationState();
+  return s ? s.enabled : null;
+}
+const cleanState = (r) => ({
+  enabled: r.enabled === true,
+  permission: ['granted', 'denied', 'prompt', 'prompt-with-rationale'].includes(r.permission) ? r.permission : 'prompt',
+  sdk: Number(r.sdk) || 0,
+  maker: String(r.maker || '').slice(0, 30),
+  installer: String(r.installer || '').slice(0, 80),
+});
+/** { enabled, permission, sdk, maker, installer }, or null. */
+export async function notificationState() {
   try {
-    return (await Clock.notificationStatus()).enabled === true;
+    return cleanState(await Clock.notificationStatus());
   } catch {
     return null;
+  }
+}
+/** Android's own prompt when it can still be shown; resolves the new state. */
+export async function requestNotificationPermission() {
+  try {
+    return cleanState(await Clock.requestNotifications());
+  } catch {
+    return notificationState();
   }
 }
 export function openNotificationSettings() {
@@ -107,6 +127,10 @@ const CLOCK_REMINDER_ID = 1201;
 
 /** Ask for the notifications permission (Android 13+ asks the person once). */
 export async function ensureNotificationPermission() {
+  // The app's own Clock plugin asks first (it reports Android's exact
+  // state); LocalNotifications is the fallback.
+  const s = await requestNotificationPermission();
+  if (s) return s.enabled;
   try {
     const current = await LocalNotifications.checkPermissions();
     if (current.display === 'granted') return true;

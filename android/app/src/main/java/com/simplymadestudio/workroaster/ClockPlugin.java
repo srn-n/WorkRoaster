@@ -1,13 +1,18 @@
 package com.simplymadestudio.workroaster;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.provider.Settings;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 /**
  * Bridge between the web app and the Android-only clock pieces: the
@@ -16,16 +21,25 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  *  sync({ startedAt, profileId })  the app's clock for the active profile (0/null = not clocked in)
  *  get()                            what Android has (a widget may have clocked in while the app was closed)
  *  setSummary({ range, earned, hours, net })  figures for the pay-cycle widget
- *  notificationStatus()             { enabled }
+ *  notificationStatus()             { enabled, permission, sdk, maker, installer }
+ *  requestNotifications()           Android's prompt (13+) when it can still be shown, then the status
  *  openNotificationSettings()       this app's page in Android's notification settings
  *  takeAction()                     "clockOut" once, after Clock out was tapped on the notification/widget
  * Event "action" ({ action: "clockOut" }) fires when that happens while the app is open.
  */
-@CapacitorPlugin(name = "Clock")
+@CapacitorPlugin(
+    name = "Clock",
+    permissions = { @Permission(strings = { Manifest.permission.POST_NOTIFICATIONS }, alias = ClockPlugin.NOTIFICATIONS) }
+)
 public class ClockPlugin extends Plugin {
+    static final String NOTIFICATIONS = "notifications";
 
     @Override
     public void load() {
+        // Channels exist from the first start, so Android lists WorkRoaster
+        // as an app that sends notifications (some phones hide or grey out
+        // the switch for apps that have none).
+        ClockNotification.ensureChannel(getContext());
         if (getActivity() != null) remember(getActivity().getIntent());
     }
 
@@ -79,9 +93,61 @@ public class ClockPlugin extends Plugin {
 
     @PluginMethod
     public void notificationStatus(PluginCall call) {
-        JSObject result = new JSObject();
-        result.put("enabled", ClockNotification.canPost(getContext()));
-        call.resolve(result);
+        call.resolve(status());
+    }
+
+    @PluginMethod
+    public void requestNotifications(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || getPermissionState(NOTIFICATIONS) == PermissionState.GRANTED) {
+            call.resolve(status());
+            return;
+        }
+        requestPermissionForAlias(NOTIFICATIONS, call, "notificationsResult");
+    }
+
+    @PermissionCallback
+    private void notificationsResult(PluginCall call) {
+        ClockNotification.ensureChannel(getContext());
+        ClockNotification.sync(getContext());
+        call.resolve(status());
+    }
+
+    /**
+     * enabled: Android will show WorkRoaster's notifications right now.
+     * permission: "granted" | "prompt" (never asked) | "prompt-with-rationale"
+     *   (refused once, can ask again) | "denied" (Android won't ask again).
+     * installer: the app that installed WorkRoaster (Play: com.android.vending).
+     * Shown in Settings so a problem on a particular phone can be told apart.
+     */
+    private JSObject status() {
+        JSObject r = new JSObject();
+        r.put("enabled", ClockNotification.canPost(getContext()));
+        String permission = "granted";
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            PermissionState state = getPermissionState(NOTIFICATIONS);
+            permission = state == null ? "prompt" : state.toString();
+        }
+        r.put("permission", permission);
+        r.put("sdk", Build.VERSION.SDK_INT);
+        r.put("maker", ClockStore.clip(Build.MANUFACTURER, 30));
+        r.put("installer", ClockStore.clip(installerPackage(), 80));
+        return r;
+    }
+
+    @SuppressWarnings("deprecation")
+    private String installerPackage() {
+        try {
+            PackageManager pm = getContext().getPackageManager();
+            String pkg = getContext().getPackageName();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                String name = pm.getInstallSourceInfo(pkg).getInstallingPackageName();
+                return name == null ? "" : name;
+            }
+            String name = pm.getInstallerPackageName(pkg);
+            return name == null ? "" : name;
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     @PluginMethod

@@ -17,7 +17,7 @@
  * or to keep them and start a new version of the job (createJobVersion).
  * -----------------------------------------------------------------------
  */
-import { normalizeRule, normalizePayMode, normalizeFixedPay, fixedScheduleMinutes, minutesFromTimes, getRateBreakdown, recordMinutes, recordPayMode } from './calculations.js';
+import { normalizeRule, normalizePayMode, normalizeFixedPay, normalizeOvertime, paymentWithOvertime, fixedScheduleMinutes, minutesFromTimes, getRateBreakdown, recordMinutes, recordPayMode } from './calculations.js';
 import { safeId } from './ids.js';
 
 const slugBase = (label) =>
@@ -63,6 +63,9 @@ export function normalizeJob(job) {
     saturdayRule: normalizeRule(src.saturdayRule),
     sundayRule: normalizeRule(src.sundayRule),
     additionalRule: normalizeRule(src.additionalRule),
+    // Optional daily overtime limit (hourly jobs). Off by default; changing
+    // it never reprices existing records — each record keeps its own split.
+    overtime: normalizeOvertime(src.overtime),
     notes: String(src.notes || ''),
   };
 }
@@ -229,7 +232,10 @@ export function repriceJobRecords(records, job) {
     const out = { ...r, baseRateAtEntry: target.baseRate, weekendRuleAtEntry: b.weekendRule, additionalRuleAtEntry: b.additionalRule, effectiveRateAtEntry: b.effectiveRate };
     if (recordPayMode(r) === 'hourlyRate') {
       out.hourlyRate = b.effectiveRate;
-      out.paymentAmount = b.payment;
+      // A record saved with overtime keeps its own split and overtime rate:
+      // only the normal part follows the job's new rate.
+      const ot = Math.max(0, Number(r.overtimeMinutesAtEntry) || 0);
+      out.paymentAmount = ot > 0 ? paymentWithOvertime(b.effectiveRate, Math.max(0, recordMinutes(r) - ot), r.overtimeRateAtEntry, ot) : b.payment;
     } else {
       out.expectedRateAtEntry = b.effectiveRate;
       out.expectedPaymentAtEntry = b.payment;

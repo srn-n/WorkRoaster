@@ -2,6 +2,12 @@
 
 All notable changes to WorkRoaster are listed here.
 
+## Unreleased — 2026-11-21
+
+- **Overtime after a daily limit:** a job paid by the hour can count time over a daily limit (for example 8 hours, your workplace's rule) as overtime — turn it on when adding a job or by editing one. When a shift goes over, WorkRoaster asks for the overtime rate for the extra time and adds it to the pay (8h × $30 + 2h × $45 = $330). The rate is remembered for next time, and old records never change.
+- **Every box matches your theme:** the custom weekend adjustment type, the job editor's rule types, the salary break, Light or dark, the Guide's examples and the pay-cycle start date now use WorkRoaster's own themed pickers instead of the phone's or browser's plain ones. Yes/no questions and renames now appear in a themed dialog too.
+- **Android app — notifications:** a one-time "Allow notifications?" card on first start; **Turn on notifications** shows Android's prompt when it can, or opens Android's settings when it can't; Settings → General → Notifications shows exactly what Android reports, with help if its switch is greyed out.
+
 ## 0.0.2 — 2026-11-16
 
 - **Android app — clocked-in notification:** while you're clocked in, a small WorkRoaster icon stays in the status bar, and the notification panel shows the time counting up second by second with a **Clock out** button. It stays until you clock out (swiping it away brings it back) and returns after a restart.

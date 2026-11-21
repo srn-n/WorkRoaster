@@ -19,6 +19,7 @@ import { renderCalculator, wireCalculator } from './calculator.js';
 import { isSupportedCurrency, normalizeCurrencyInput, normalizeCustomCurrency, MAJOR_CURRENCIES, currencyName } from './currency.js';
 import { isNativeApp } from './platform.js';
 import { installPressFeedback } from './press.js';
+import { askConfirm, askText, cancelOpenDialog } from './dialog.js';
 import { VIBRATION_STRENGTHS, loadVibration, saveVibration } from './vibration.js';
 import { TAX_COUNTRIES, taxCountry, cycleTaxEstimate, normalizeTaxSettings, cyclesPerYear } from './tax.js';
 // export.js pulls in jsPDF (which itself bundles html2canvas/DOMPurify)
@@ -77,6 +78,14 @@ function viewFromHash() {
 // those fields from `editingRecord`/defaults, not from live DOM values.
 // ---------------------------------------------------------------------
 let datePickerOpen = false;
+// Which date input the calendar popover writes to. 'f-date' (record form)
+// keeps its original element ids; any other date field rendered with
+// dateFieldMarkup() uses `${id}-date-popover`, `btn-${id}-date`, `${id}-date-body`.
+let datePickerTarget = 'f-date';
+const dpIds = (target = datePickerTarget) =>
+  target === 'f-date'
+    ? { input: 'f-date', popover: 'date-picker-popover', trigger: 'btn-date-picker', body: 'date-picker-body' }
+    : { input: target, popover: `${target}-date-popover`, trigger: `btn-${target}-date`, body: `${target}-date-body` };
 let datePickerNavYear = null;
 let datePickerNavMonth = null;
 // Custom Job listbox — mirrors the date picker's approach: the real
@@ -98,6 +107,9 @@ let timePickerTargetId = null;
 // call updateJobAwareCalc() rather than render().
 let formOverrideMode = 'default'; // 'default' | 'none' | 'custom'
 let formOverrideRule = { type: 'percent', value: 0 };
+// Overtime rate typed in the record form (kept while the box is redrawn).
+let formOvertimeRate = null;
+let formOvertimeFor = null; // which record (or 'new') formOvertimeRate belongs to
 let formAdditionalOverrideMode = 'default'; // 'default' | 'none'
 let rateConfirmationDialog = null;
 /** native.js once loaded (Android app only; see initNativeApp). */
@@ -606,10 +618,10 @@ function saveNoteEdit(id, text) {
   commitNotes(state.notes.map((n) => (n.id === id ? { ...n, text: clean.slice(0, store.NOTE_MAX_LENGTH), updatedAt: now } : n)), 'Note updated.');
 }
 
-function deleteNote(id) {
+async function deleteNote(id) {
   const note = state.notes.find((n) => n.id === id);
   if (!note) return;
-  if (!confirm(`Delete this note?\n\n“${note.text.slice(0, 120)}${note.text.length > 120 ? '…' : ''}”`)) return;
+  if (!(await askConfirm(`“${note.text.slice(0, 120)}${note.text.length > 120 ? '…' : ''}”`, { title: 'Delete this note?', confirmLabel: 'Delete', danger: true }))) return;
   if (state.noteEditingId === id) state.noteEditingId = null;
   focusAfterRender = focusById('note-new');
   commitNotes(state.notes.filter((n) => n.id !== id), 'Note deleted.');
@@ -1216,6 +1228,20 @@ const BREAK_CHOICES = [
 const WEEKDAY_LONG = Array.from({ length: 7 }, (_, i) => new Date(2023, 0, 1 + i).toLocaleDateString(undefined, { weekday: 'long' }));
 const CYCLE_START_DAY_CHOICES = [1, 2, 3, 4, 5, 6, 0].map((d) => ({ value: d, label: `${WEEKDAY_LONG[d]} – ${WEEKDAY_LONG[(d + 6) % 7]}` }));
 
+// Weekend/additional rule types, as the job editor and the record form's
+// custom weekend adjustment offer them (themed, like every other dropdown).
+const RULE_TYPE_CHOICES = [
+  { value: 'none', label: 'No adjustment' },
+  { value: 'percent', label: 'Percentage (+%)' },
+  { value: 'multiplier', label: 'Multiplier (×)' },
+  { value: 'custom', label: 'Flat rate ($)' },
+];
+const THEME_MODE_CHOICES = [
+  { value: 'system', label: 'Match system' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
+
 const CYCLE_LENGTH_CHOICES = [
   { value: 7, label: '7 days (weekly)' },
   { value: 14, label: '14 days (fortnightly)' },
@@ -1468,8 +1494,12 @@ function currentFormBreakdown(job) {
   return calc.getRateBreakdown(jobWithFormAdditionalOverride(job), dateVal, currentFormOverride(), mins);
 }
 
-function renderRatePanelBody(job, b, payMode = 'hourlyRate') {
+function renderRatePanelBody(job, b, payMode = 'hourlyRate', ot = null) {
   if (!job) return '';
+  const otRows = ot && b
+    ? `<div class="rate-live-row is-adjustment"><span class="rate-live-label">Overtime</span><span class="rate-live-value tnum">${calc.formatDuration(ot.overtime)} × ${ot.rate === null ? 'rate needed' : `${money(ot.rate)}/hr`}</span></div>`
+    : '';
+  const total = !b ? '—' : ot ? (ot.total === null ? 'Needs the overtime rate' : money(ot.total)) : money(b.payment);
   return `
     <div class="rate-live-panel">
       <div class="rate-live-row"><span class="rate-live-label">Job</span><span class="rate-live-value">${esc(job.name)}</span></div>
@@ -1478,7 +1508,8 @@ function renderRatePanelBody(job, b, payMode = 'hourlyRate') {
       <div class="rate-live-row is-adjustment"><span class="rate-live-label">Additional</span><span class="rate-live-value tnum">${b ? esc(calc.formatRuleLabel(b.additionalRule, displayCurrency())) : '—'}</span></div>
       <div class="rate-live-row is-effective"><span class="rate-live-label">Effective rate</span><span class="rate-live-value tnum">${b ? `${money(b.effectiveRate)}/hr` : '—'}</span></div>
       <div class="rate-live-row"><span class="rate-live-label">Working time</span><span class="rate-live-value tnum">${b ? calc.formatDuration(b.minutes) : '—'}</span></div>
-      <div class="rate-live-row is-total"><span class="rate-live-label">${payMode === 'hourlyRate' ? 'Calculated payment' : 'Expected payment'}</span><span class="rate-live-value tnum">${b ? money(b.payment) : '—'}</span></div>
+      ${otRows}
+      <div class="rate-live-row is-total"><span class="rate-live-label">${payMode === 'hourlyRate' ? 'Calculated payment' : 'Expected payment'}</span><span class="rate-live-value tnum">${total}</span></div>
     </div>`;
 }
 
@@ -1635,6 +1666,10 @@ function renderForm() {
     formOverrideRule = { type: 'percent', value: 0 };
   }
   formAdditionalOverrideMode = editingRecord?.additionalRuleAtEntry?.type === 'none' ? 'none' : 'default';
+  if (formOvertimeFor !== (state.editingId || 'new')) {
+    formOvertimeFor = state.editingId || 'new';
+    formOvertimeRate = null;
+  }
 
   const currentJobId = editingRecord ? editingRecord.jobId || '' : '';
   const job = currentJobId ? jobs.findJob(state.settings.jobs, currentJobId) : null;
@@ -1774,11 +1809,7 @@ function renderForm() {
             <div class="grid grid-2" id="override-custom-fields" style="margin-top:8px;${formOverrideMode === 'custom' ? '' : 'display:none'}">
               <div class="field">
                 <label for="f-override-type">Type</label>
-                <select id="f-override-type">
-                  <option value="percent" ${formOverrideRule.type === 'percent' ? 'selected' : ''}>Percentage (+%)</option>
-                  <option value="multiplier" ${formOverrideRule.type === 'multiplier' ? 'selected' : ''}>Multiplier (×)</option>
-                  <option value="custom" ${formOverrideRule.type === 'custom' ? 'selected' : ''}>Flat rate ($)</option>
-                </select>
+                ${themedSelect('f-override-type', RULE_TYPE_CHOICES.filter((c) => c.value !== 'none'), formOverrideRule.type, 'custom adjustment type')}
               </div>
               <div class="field">
                 <label for="f-override-value">Value</label>
@@ -1798,6 +1829,7 @@ function renderForm() {
             </div>
             <div class="pay-mode-fields" id="pay-mode-fields">${renderPayModeFields(payMode, job, editingRecord, useEndTime)}</div>
           </div>
+          <div id="overtime-root" aria-live="polite"></div>
           <div id="pay-mode-extra">${renderPayModeExtra(payMode, job, breakdown)}</div>
         </fieldset>
 
@@ -1903,6 +1935,7 @@ function recordMetaTags(r) {
     <span class="tag pay-mode-tag">${esc(payModeLabel(calc.recordPayMode(r)))}</span>
     <span class="tag">${icon(recordTypeIcon(r.dayType, 'day'), 'icon-sm')}${esc(r.dayType || 'Unspecified')}</span>
     <span class="tag muted-tag">${icon(recordTypeIcon(r.paymentType, 'payment'), 'icon-sm')}${esc(r.paymentType || 'Unspecified')}</span>
+    ${r.overtimeMinutesAtEntry > 0 ? `<span class="tag overtime-tag">${icon('clock', 'icon-sm')}${esc(calc.formatDuration(r.overtimeMinutesAtEntry))} overtime at ${esc(money(r.overtimeRateAtEntry))}/hr</span>` : ''}
     ${r.mapNumber ? `<span class="meta-item">Period <b>${esc(r.mapNumber)}</b></span>` : ''}
     ${legacyCycle ? `<span class="meta-item legacy-cycle" title="Manually entered before automatic cycles were added">Was <b>${esc(legacyCycle)}</b></span>` : ''}`;
 }
@@ -2290,7 +2323,7 @@ function profilesTab() {
     <p class="field-help">The first profile holds the records that were already here and can be renamed but not deleted.</p>`;
 }
 
-function handleProfileAction(action, id) {
+async function handleProfileAction(action, id) {
   const profile = profileIndex().profiles.find((p) => p.id === id);
   if (!profile) return;
   try {
@@ -2299,7 +2332,7 @@ function handleProfileAction(action, id) {
       return;
     }
     if (action === 'rename') {
-      const next = prompt('Rename profile to:', profile.name);
+      const next = await askText('New name for this profile', profile.name, { title: 'Rename profile', confirmLabel: 'Rename', maxLength: 40 });
       if (next === null) return;
       if (!next.trim()) return showToast('A profile needs a name.', 'error');
       store.renameProfile(id, next);
@@ -2308,7 +2341,7 @@ function handleProfileAction(action, id) {
     }
     if (action === 'delete') {
       const count = id === store.getActiveProfileId() ? state.records.length : store.loadRecordsFor(id).length;
-      if (!confirm(`Delete the profile “${profile.name}” and its ${count} record(s), jobs and notes from this device? This cannot be undone — ${FILE_VERB.toLowerCase()} a backup of it first if unsure.`)) return;
+      if (!(await askConfirm(`Its ${count} record(s), jobs and notes will be removed from this device. This cannot be undone — ${FILE_VERB.toLowerCase()} a backup of it first if unsure.`, { title: `Delete the profile “${profile.name}”?`, confirmLabel: 'Delete profile', danger: true }))) return;
       const wasActive = id === store.getActiveProfileId();
       store.deleteProfile(id);
       if (wasActive) {
@@ -2387,7 +2420,7 @@ const hhmmLocal = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 function renderClockBar() {
   const clock = store.loadClock();
   if (!clock) {
-    return `
+    return `${notificationCard()}
       <div class="clock-bar" data-clock-state="idle">
         <span class="clock-bar-text">${icon('clock', 'icon-sm')}<span>Working now? Start a live timer.</span></span>
         <button class="btn secondary small" id="btn-clock-in" type="button">${icon('clock', 'icon-sm')}Clock in</button>
@@ -2478,6 +2511,37 @@ function clearClock() {
 // ---------------------------------------------------------------------
 /** true / false once known (app only); null = not known yet. */
 let notificationsOn = null;
+/** Android's full notification state (app only), see native.js#notificationState. */
+let notifState = null;
+const NOTIF_CARD_KEY = 'modern_work_hours_tracker_v1_notif_card';
+
+/** One-time card (app only) while Android has never been asked. */
+function notificationCard() {
+  if (!isNativeApp() || !notifState || notifState.permission !== 'prompt' || notifState.enabled) return '';
+  try {
+    if (localStorage.getItem(NOTIF_CARD_KEY) === 'dismissed') return '';
+  } catch {
+    /* storage blocked: still show it */
+  }
+  return `
+      <div class="notif-card" role="region" aria-label="Notifications">
+        <p><strong>Allow notifications?</strong> WorkRoaster uses them only for the clocked-in timer and the 12-hour reminder. Nothing is sent anywhere.</p>
+        <div class="notif-card-actions">
+          <button class="btn primary small" id="btn-notif-card-allow" type="button">Allow</button>
+          <button class="btn secondary small" id="btn-notif-card-later" type="button">Not now</button>
+        </div>
+      </div>`;
+}
+
+function dismissNotificationCard() {
+  try {
+    localStorage.setItem(NOTIF_CARD_KEY, 'dismissed');
+  } catch {
+    /* only for this session then */
+  }
+}
+
+const installerLabel = (pkg) => (!pkg ? 'unknown' : pkg === 'com.android.vending' ? 'Google Play' : 'a file (not Google Play)');
 let lastClockPushed = null; // `${startedAt}|${profileId}` last sent to Android
 let lastSummaryPushed = null;
 
@@ -2536,9 +2600,11 @@ async function syncNativeClock() {
   const clock = store.loadClock();
   lastClockPushed = `${clock ? clock.startedAt : 0}|${profileId}`;
   nativeModule.clockSync(clock ? clock.startedAt : 0, profileId);
-  const enabled = await nativeModule.notificationsEnabled();
-  if (enabled !== notificationsOn) {
+  const st = await nativeModule.notificationState();
+  const enabled = st ? st.enabled : null;
+  if (enabled !== notificationsOn || JSON.stringify(st) !== JSON.stringify(notifState)) {
     notificationsOn = enabled;
+    notifState = st;
     changed = true;
   }
   const action = await nativeModule.takeClockAction();
@@ -2557,6 +2623,7 @@ async function askForClockNotifications(startedAt) {
   if (!nativeModule) return;
   const ok = await nativeModule.ensureNotificationPermission();
   notificationsOn = ok;
+  notifState = await nativeModule.notificationState();
   if (ok) await nativeModule.scheduleClockReminder(startedAt + CLOCK_REMINDER_MS);
   const clock = store.loadClock();
   lastClockPushed = `${clock ? clock.startedAt : 0}|${store.getActiveProfileId()}`;
@@ -2569,9 +2636,17 @@ async function askForClockNotifications(startedAt) {
  *  app's notification settings (after "Don't allow", Android won't ask again). */
 async function turnOnNotifications() {
   if (!nativeModule) return;
-  const ok = await nativeModule.ensureNotificationPermission();
-  notificationsOn = ok;
-  if (ok) {
+  dismissNotificationCard();
+  let st = await nativeModule.notificationState();
+  // Android only shows its prompt while it hasn't been refused for good.
+  if (st && !st.enabled && (st.permission === 'prompt' || st.permission === 'prompt-with-rationale')) {
+    st = await nativeModule.requestNotificationPermission();
+  }
+  if (st) {
+    notifState = st;
+    notificationsOn = st.enabled;
+  }
+  if (st && st.enabled) {
     const clock = store.loadClock();
     if (clock) await nativeModule.scheduleClockReminder(clock.startedAt + CLOCK_REMINDER_MS);
     lastClockPushed = null;
@@ -2579,6 +2654,9 @@ async function turnOnNotifications() {
     showToast('Notifications are on.');
     return;
   }
+  // Refused before ("Don't allow" twice), or switched off in Android's
+  // settings: only Android's settings page can turn them back on.
+  render();
   nativeModule.openNotificationSettings();
 }
 
@@ -2598,7 +2676,9 @@ function notificationFields() {
           ? '<button class="btn secondary small" id="s-notif-settings" type="button">Notification settings</button>'
           : '<button class="btn primary small" id="s-notif-on" type="button">Turn on notifications</button>'}
       </div>
+      ${notifState && !notifState.enabled ? `<p class="field-help">If Android's “Allow notifications” switch is greyed out, tap <strong>Turn on notifications</strong> here first: some phones unlock it only after the app has asked. ${notifState.installer === 'com.android.vending' ? 'If it stays grey, please tell us with Send feedback (the line below helps).' : 'If it stays grey, install WorkRoaster from your Google Play testing link instead of a file, and tell us with Send feedback (the line below helps).'}</p>` : ''}
       <small class="field-help">Only for your own clock-in. WorkRoaster never sends anything; there’s no internet access.</small>
+      ${notifState ? `<small class="field-help notif-diagnostics">Android ${notifState.sdk || '?'}${notifState.maker ? ` · ${esc(notifState.maker)}` : ''} · permission: ${esc(notifState.permission)} · installed from ${esc(installerLabel(notifState.installer))}</small>` : ''}
     </fieldset>`;
 }
 
@@ -2634,9 +2714,14 @@ function clockOut() {
 function wireClock() {
   document.getElementById('btn-clock-in')?.addEventListener('click', clockIn);
   document.getElementById('btn-clock-notif')?.addEventListener('click', turnOnNotifications);
+  document.getElementById('btn-notif-card-allow')?.addEventListener('click', turnOnNotifications);
+  document.getElementById('btn-notif-card-later')?.addEventListener('click', () => {
+    dismissNotificationCard();
+    render();
+  });
   document.getElementById('btn-clock-out')?.addEventListener('click', clockOut);
-  document.getElementById('btn-clock-cancel')?.addEventListener('click', () => {
-    if (!confirm('Cancel this clock-in? The running time won’t be saved.')) return;
+  document.getElementById('btn-clock-cancel')?.addEventListener('click', async () => {
+    if (!(await askConfirm('The running time won’t be saved.', { title: 'Cancel this clock-in?', confirmLabel: 'Cancel clock-in', cancelLabel: 'Keep it running', danger: true }))) return;
     clearClock();
     render();
   });
@@ -2654,7 +2739,7 @@ function useThemedPickersInApp() {
   document.querySelectorAll('input[type="date"], input[type="time"]').forEach((input) => {
     if (input.dataset.themedPicker) return;
     const trigger = input.type === 'date'
-      ? (input.id === 'f-date' ? document.getElementById('btn-date-picker') : null)
+      ? document.getElementById(dpIds(input.id).trigger)
       : document.getElementById(`btn-${input.id}-time`);
     if (!trigger) return;
     input.dataset.themedPicker = '1';
@@ -2797,6 +2882,58 @@ function feedbackTab() {
 
 // -- Jobs settings tab ---------------------------------------------------
 
+/** Job editor: optional daily overtime limit (hourly jobs only). */
+function overtimeFieldset(prefix, overtime) {
+  const ot = calc.normalizeOvertime(overtime);
+  const h = Math.floor(ot.afterMinutes / 60);
+  const m = ot.afterMinutes % 60;
+  return `
+        <fieldset class="field-group job-mode-section job-overtime" data-modes="hourlyRate">
+          <legend>Overtime</legend>
+          <label class="checkbox-field" for="${prefix}-on">
+            <input type="checkbox" id="${prefix}-on" data-ot-toggle="${prefix}" ${ot.enabled ? 'checked' : ''}>
+            <span>Count time over a daily limit as overtime</span>
+          </label>
+          <div class="grid grid-2 ot-limit" id="${prefix}-limit" ${ot.enabled ? '' : 'hidden'}>
+            <div class="field">
+              <label for="${prefix}-h">Overtime starts after (hours)</label>
+              <input id="${prefix}-h" type="number" min="0" max="24" step="1" inputmode="numeric" value="${h}">
+            </div>
+            <div class="field">
+              <label for="${prefix}-m">and minutes</label>
+              <input id="${prefix}-m" type="number" min="0" max="59" step="1" inputmode="numeric" value="${m}">
+            </div>
+          </div>
+          <p class="field-error ot-error" id="${prefix}-error" role="alert"></p>
+          <small class="field-help">Use your workplace's rule, e.g. 8 hours a day. When this job's records for a day go past it, WorkRoaster asks for the overtime rate for the extra time as you save, and remembers it for next time. Changing this never reprices records you've already saved.</small>
+        </fieldset>`;
+}
+
+/** Shown in place (no re-render), so everything typed in the job form stays. */
+function showFormLevelJobError(message, focusId) {
+  const prefix = focusId.replace(/-h$/, '');
+  const el = document.getElementById(`${prefix}-error`);
+  if (el) el.textContent = message;
+  document.getElementById(focusId)?.focus();
+}
+
+/** { enabled, afterMinutes } from a job form's Overtime section, or an error. */
+function readOvertimeFromForm(prefix, previous) {
+  const enabled = !!document.getElementById(`${prefix}-on`)?.checked;
+  const hRaw = document.getElementById(`${prefix}-h`)?.value ?? '';
+  const mRaw = document.getElementById(`${prefix}-m`)?.value ?? '';
+  const h = Number(hRaw === '' ? 0 : hRaw);
+  const m = Number(mRaw === '' ? 0 : mRaw);
+  const prev = calc.normalizeOvertime(previous);
+  if (!enabled) return { overtime: { ...prev, enabled: false } };
+  if (!Number.isInteger(h) || h < 0 || h > 24 || !Number.isInteger(m) || m < 0 || m > 59) {
+    return { error: 'Overtime limit: whole hours (0–24) and minutes (0–59).' };
+  }
+  const afterMinutes = h * 60 + m;
+  if (afterMinutes <= 0 || afterMinutes > 24 * 60) return { error: 'Set when overtime starts — more than 0 and at most 24 hours a day.' };
+  return { overtime: { ...prev, enabled: true, afterMinutes } };
+}
+
 function ruleEditorRow(name, id, rule) {
   const r = calc.normalizeRule(rule);
   return `
@@ -2804,15 +2941,7 @@ function ruleEditorRow(name, id, rule) {
       <span class="rule-editor-name">${esc(name)}</span>
       <div class="field">
         <label for="${id}-type">Type</label>
-        <div class="select-control select-plain">
-          <select id="${id}-type">
-            <option value="none" ${r.type === 'none' ? 'selected' : ''}>No adjustment</option>
-            <option value="percent" ${r.type === 'percent' ? 'selected' : ''}>Percentage (+%)</option>
-            <option value="multiplier" ${r.type === 'multiplier' ? 'selected' : ''}>Multiplier (×)</option>
-            <option value="custom" ${r.type === 'custom' ? 'selected' : ''}>Flat rate ($)</option>
-          </select>
-          <span class="select-chevron" aria-hidden="true"></span>
-        </div>
+        ${themedSelect(`${id}-type`, RULE_TYPE_CHOICES, r.type, `${name} adjustment type`)}
       </div>
       <div class="field">
         <label for="${id}-value">Value</label>
@@ -2885,12 +3014,7 @@ function jobFixedPayFields(prefix, fixedPay) {
             </div>
             <div class="field">
               <label for="${prefix}-break">Break</label>
-              <div class="select-control select-plain">
-                <select id="${prefix}-break">
-                  ${calc.FIXED_PAY_BREAK_OPTIONS.map((m) => `<option value="${m}" ${fp.breakMinutes === m ? 'selected' : ''}>${m ? `${m} min` : 'No break'}</option>`).join('')}
-                </select>
-                <span class="select-chevron" aria-hidden="true"></span>
-              </div>
+              ${themedSelect(`${prefix}-break`, calc.FIXED_PAY_BREAK_OPTIONS.map((m) => ({ value: m, label: m ? `${m} min` : 'No break' })), fp.breakMinutes, 'standard break')}
             </div>
           </div>
           <small class="field-help">New records for this job start with these hours — you can still change any single record.</small>`;
@@ -2957,6 +3081,7 @@ function renderJobRow(job, records) {
         ${job.saturdayRule.type !== 'none' ? `<span class="tag">Sat ${esc(calc.formatRuleLabel(job.saturdayRule, displayCurrency()))}</span>` : ''}
         ${job.sundayRule.type !== 'none' ? `<span class="tag">Sun ${esc(calc.formatRuleLabel(job.sundayRule, displayCurrency()))}</span>` : ''}
         ${job.additionalRule.type !== 'none' ? `<span class="tag">+ ${esc(calc.formatRuleLabel(job.additionalRule, displayCurrency()))}</span>` : ''}
+        ${job.overtime?.enabled && jobPayMode(job) === 'hourlyRate' ? `<span class="tag">Overtime after ${esc(calc.formatDuration(job.overtime.afterMinutes))}</span>` : ''}
       </div>
       ${
         editing
@@ -2984,6 +3109,7 @@ function renderJobRow(job, records) {
           <small class="field-help">Additional loading is also what's offered for overtime and public-holiday shifts when entering a record.</small>
           ${JOB_RATES_MODE_HINT}
         </fieldset>
+        ${overtimeFieldset(`je-ot-${esc(job.id)}`, job.overtime)}
         <fieldset class="field-group">
           <legend>Other</legend>
           <div class="field">
@@ -3032,6 +3158,7 @@ function jobsTab() {
         <small class="field-help">Additional loading is also what's offered for overtime and public-holiday shifts when you enter a record — this job doesn't need a separate public-holiday rate.</small>
         ${JOB_RATES_MODE_HINT}
       </fieldset>
+      ${overtimeFieldset('new-job-ot', null)}
       <fieldset class="field-group">
         <legend>Other</legend>
         <div class="field">
@@ -3066,7 +3193,7 @@ function cycleStartField() {
   return `
     <div class="field">
       <label for="s-cycle-start-date">Current pay cycle started on</label>
-      <input id="s-cycle-start-date" type="date" required value="${current.cycleStart}" aria-describedby="s-cycle-start-help">
+      ${dateFieldMarkup('s-cycle-start-date', current.cycleStart, 'Open calendar for the pay cycle start date', 'aria-describedby="s-cycle-start-help"')}
       ${help}
     </div>`;
 }
@@ -3191,14 +3318,7 @@ ${(() => {
     ${isNativeApp() ? vibrationFields() : ''}
     <div class="field">
       <label for="s-theme">Light or dark</label>
-      <div class="select-control select-plain">
-      <select id="s-theme">
-        <option value="system" ${state.settings.theme === 'system' ? 'selected' : ''}>Match system</option>
-        <option value="light" ${state.settings.theme === 'light' ? 'selected' : ''}>Light</option>
-        <option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Dark</option>
-      </select>
-      <span class="select-chevron" aria-hidden="true"></span>
-      </div>
+      ${themedSelect('s-theme', THEME_MODE_CHOICES, state.settings.theme || 'system', 'light or dark')}
       <small class="field-help">"Match system" follows your device's light/dark setting automatically.</small>
     </div>`;
 
@@ -3303,10 +3423,10 @@ const GUIDE_INDEX = GUIDE_SECTIONS.flatMap((section) =>
 function renderGuideExample(kind) {
   const num = (id, label, value, attrs = '') =>
     `<label class="guide-example-field"><span>${label}</span><input id="${id}" type="number" inputmode="decimal" value="${value}" ${attrs}></label>`;
-  const time = (id, label, value) => `<label class="guide-example-field"><span>${label}</span><input id="${id}" type="time" value="${value}"></label>`;
+  const time = (id, label, value) => `<div class="guide-example-field"><label for="${id}">${label}</label>${timeFieldMarkup(id, value, `Open time picker for ${label.toLowerCase()} time`, false)}</div>`;
   const inputs = {
     break: `${time('gx-break-start', 'Start', '09:00')}${time('gx-break-end', 'End', '17:00')}
-      <label class="guide-example-field"><span>Break</span><select id="gx-break-mins"><option value="0">None</option><option value="15">15 min</option><option value="30" selected>30 min</option><option value="60">60 min</option></select></label>`,
+      <div class="guide-example-field"><label for="gx-break-mins">Break</label>${themedSelect('gx-break-mins', [{ value: 0, label: 'None' }, { value: 15, label: '15 min' }, { value: 30, label: '30 min' }, { value: 60, label: '60 min' }], 30, 'example break')}</div>`,
     hourly: `${num('gx-h-rate', 'Base rate ($/hr)', 30, 'min="0" step="0.01"')}${num('gx-h-weekend', 'Weekend rule (+%)', 0, 'min="0" step="1"')}${num('gx-h-add', 'Additional (+%)', 0, 'min="0" step="1"')}${num('gx-h-hours', 'Working hours', 5, 'min="0" step="0.25"')}`,
     actual: `${num('gx-a-pay', 'Actual payment ($)', 40, 'min="0" step="0.01"')}${num('gx-a-hours', 'Working hours', 3, 'min="0" step="0.25"')}`,
   }[kind];
@@ -3454,7 +3574,16 @@ function navigateGuideSection(id, { focusTab = false } = {}) {
 }
 
 function wireGuideContentEvents() {
-  document.querySelectorAll('.guide-example input, .guide-example select').forEach((el) => el.addEventListener('input', updateGuideExamples));
+  document.querySelectorAll('.guide-example input, .guide-example select').forEach((el) => {
+    el.addEventListener('input', updateGuideExamples);
+    el.addEventListener('change', updateGuideExamples);
+  });
+  document.querySelectorAll('.guide-example .time-picker-trigger').forEach((btn) => {
+    const id = btn.id.replace(/^btn-/, '').replace(/-time$/, '');
+    btn.addEventListener('click', () => toggleTimePicker(id));
+  });
+  wireOptionPickers();
+  if (isNativeApp()) useThemedPickersInApp();
   updateGuideExamples();
 }
 
@@ -3798,6 +3927,7 @@ function restoreFormDraft(draft) {
 
 /** The form is being reset on purpose (saved, cancelled, opened for editing). */
 function discardFormDraft() {
+  formOvertimeRate = null;
   dirtyFieldIds.clear();
   formDirty = false;
   parkedFormDraft = null;
@@ -3913,6 +4043,72 @@ function currentFormNetMinutes() {
   const gross = currentFormMinutes();
   if (gross === null) return null;
   return Math.max(0, gross - currentFormBreakMinutes());
+}
+
+/**
+ * Daily overtime for the record being entered, or null when it doesn't
+ * apply: a job paid by the hour with overtime turned on, whose records for
+ * that day (others already saved + this one) go past its limit.
+ */
+function formOvertime(job = selectedFormJob(), netMinutes = currentFormNetMinutes()) {
+  if (!job || currentFormPayMode() !== 'hourlyRate' || !document.getElementById('f-hourly-rate')) return null;
+  const ot = calc.normalizeOvertime(job.overtime);
+  const dateVal = document.getElementById('f-date')?.value;
+  if (!ot.enabled || !dateVal || !netMinutes) return null;
+  const earlier = state.records
+    .filter((r) => r.jobId === job.id && r.date === dateVal && r.id !== state.editingId)
+    .reduce((sum, r) => sum + calc.recordMinutes(r), 0);
+  const split = calc.splitOvertime(netMinutes, earlier, ot.afterMinutes);
+  if (split.overtime <= 0) return null;
+  return { ...split, earlier, afterMinutes: ot.afterMinutes, lastRate: ot.lastRate };
+}
+
+/** The overtime rate typed in the form: a number ≥ 0, or null if blank/invalid. */
+function formOvertimeRateValue() {
+  const raw = document.getElementById('f-ot-rate')?.value ?? (formOvertimeRate ?? '');
+  if (String(raw).trim() === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/** Show, update or remove the "Overtime" box in the Pay section. */
+function updateOvertimeBox(job, breakdown) {
+  const root = document.getElementById('overtime-root');
+  if (!root) return null;
+  const ot = formOvertime(job);
+  if (!ot) {
+    root.innerHTML = '';
+    return null;
+  }
+  if (!document.getElementById('f-ot-rate')) {
+    const editing = state.editingId ? state.records.find((r) => r.id === state.editingId) : null;
+    const prefill = formOvertimeRate ?? (editing && editing.overtimeRateAtEntry !== undefined ? editing.overtimeRateAtEntry : ot.lastRate);
+    const currencyPrefix = money(0).replace(/[0-9.,]/g, '').trim() || '$';
+    root.innerHTML = `
+          <div class="overtime-box">
+            <p class="overtime-summary" id="f-ot-summary"></p>
+            <div class="field">
+              <label for="f-ot-rate">Overtime rate for that time</label>
+              <div class="prefix-input">
+                <span class="prefix">${esc(currencyPrefix)}</span>
+                <input id="f-ot-rate" type="number" min="0" step="0.01" inputmode="decimal" placeholder="e.g. 45.00" value="${prefill === null || prefill === undefined ? '' : esc(String(prefill))}" aria-describedby="f-ot-help">
+              </div>
+              <small class="field-help" id="f-ot-help"></small>
+            </div>
+            <div class="overtime-total"><span>Payment with overtime</span><output id="f-ot-total" class="tnum">—</output></div>
+          </div>`;
+    document.getElementById('f-ot-rate').addEventListener('input', (e) => {
+      formOvertimeRate = e.target.value;
+      updateJobAwareCalc();
+    });
+  }
+  const limit = calc.formatDuration(ot.afterMinutes);
+  document.getElementById('f-ot-summary').innerHTML = `<strong>${esc(calc.formatDuration(ot.overtime))} overtime</strong> — over this job's ${esc(limit)} daily limit${ot.earlier ? ` (counting ${esc(calc.formatDuration(ot.earlier))} already logged that day)` : ''}.`;
+  document.getElementById('f-ot-help').textContent = `Normal rate: ${breakdown ? `${money(breakdown.effectiveRate)}/hr` : '—'} for the first ${calc.formatDuration(ot.normal)}. Enter what you're paid per hour for the overtime.`;
+  const rate = formOvertimeRateValue();
+  const total = breakdown && rate !== null ? calc.paymentWithOvertime(breakdown.effectiveRate, ot.normal, rate, ot.overtime) : null;
+  document.getElementById('f-ot-total').textContent = total === null ? 'Enter the overtime rate' : money(total);
+  return { ...ot, rate, total };
 }
 
 /** Live-updates the read-only "Working time" output in Ending-time mode
@@ -4113,15 +4309,16 @@ function updateJobAwareCalc() {
   const subtitle = document.getElementById('f-job-subtitle');
   if (subtitle) subtitle.textContent = jobSubtitle(job);
 
+  const ot = updateOvertimeBox(job, breakdown);
   const panelRoot = document.getElementById('rate-panel-root');
-  if (panelRoot) panelRoot.innerHTML = renderRatePanelBody(job, breakdown, currentFormPayMode());
+  if (panelRoot) panelRoot.innerHTML = renderRatePanelBody(job, breakdown, currentFormPayMode(), ot);
 
   document.querySelectorAll('.job-pay-manual-field').forEach((el) => el.classList.toggle('is-hidden', !!job));
   const fromJob = document.getElementById('job-pay-fromjob');
   if (fromJob) {
     fromJob.classList.toggle('is-hidden', !job);
     const out = document.getElementById('f-job-calculated-pay');
-    if (out) out.textContent = breakdown ? money(breakdown.payment) : '—';
+    if (out) out.textContent = !breakdown ? '—' : ot ? (ot.total === null ? 'Needs the overtime rate' : money(ot.total)) : money(breakdown.payment);
   }
 
   const comparisonRoot = document.getElementById('pay-panel-root');
@@ -4156,8 +4353,21 @@ function wireOverrideControls() {
 // datePickerOpen/datePickerNavYear/datePickerNavMonth declaration.
 // ---------------------------------------------------------------------
 
+/** A date input with the themed calendar next to it (same look as the
+ *  record form's date). The <input type="date"> stays the real value. */
+function dateFieldMarkup(id, value, ariaLabel, extraAttrs = '') {
+  return `
+      <div class="date-field-row">
+        <input id="${id}" type="date" required value="${esc(value)}" ${extraAttrs}>
+        <button class="icon-btn date-picker-trigger" id="btn-${id}-date" type="button" aria-label="${esc(ariaLabel)}" aria-haspopup="dialog" aria-expanded="false">${icon('calendar', 'icon-sm')}</button>
+      </div>
+      <div class="date-picker-popover" id="${id}-date-popover" role="dialog" aria-label="Choose a date">
+        <div id="${id}-date-body"></div>
+      </div>`;
+}
+
 function renderDatePickerBody() {
-  const selected = document.getElementById('f-date')?.value || '';
+  const selected = document.getElementById(dpIds().input)?.value || '';
   const base = selected || calc.todayString();
   if (datePickerNavYear === null || datePickerNavMonth === null) {
     const [y, m] = base.split('-').map(Number);
@@ -4206,12 +4416,16 @@ function renderDatePickerBody() {
 }
 
 function wireDatePickerBodyEvents() {
-  document.querySelectorAll('[data-dp-date]').forEach((btn) => btn.addEventListener('click', () => selectDatePickerDate(btn.dataset.dpDate)));
-  document.querySelector('[data-dp-nav="prev"]')?.addEventListener('click', () => navDatePicker(-1));
-  document.querySelector('[data-dp-nav="next"]')?.addEventListener('click', () => navDatePicker(1));
-  document.querySelector('[data-dp-action="today"]')?.addEventListener('click', () => selectDatePickerDate(calc.todayString()));
-  document.querySelector('[data-dp-action="clear"]')?.addEventListener('click', () => {
-    const input = document.getElementById('f-date');
+  // Scoped to the open picker's own body: another date field's popover may
+  // still hold an older calendar.
+  const root = document.getElementById(dpIds().body);
+  if (!root) return;
+  root.querySelectorAll('[data-dp-date]').forEach((btn) => btn.addEventListener('click', () => selectDatePickerDate(btn.dataset.dpDate)));
+  root.querySelector('[data-dp-nav="prev"]')?.addEventListener('click', () => navDatePicker(-1));
+  root.querySelector('[data-dp-nav="next"]')?.addEventListener('click', () => navDatePicker(1));
+  root.querySelector('[data-dp-action="today"]')?.addEventListener('click', () => selectDatePickerDate(calc.todayString()));
+  root.querySelector('[data-dp-action="clear"]')?.addEventListener('click', () => {
+    const input = document.getElementById(dpIds().input);
     if (input) {
       input.value = '';
       input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -4222,7 +4436,7 @@ function wireDatePickerBodyEvents() {
 }
 
 function refreshDatePickerBody() {
-  const body = document.getElementById('date-picker-body');
+  const body = document.getElementById(dpIds().body);
   if (!body) return;
   body.innerHTML = renderDatePickerBody();
   wireDatePickerBodyEvents();
@@ -4244,7 +4458,7 @@ function navDatePicker(delta) {
 }
 
 function selectDatePickerDate(dateStr) {
-  const input = document.getElementById('f-date');
+  const input = document.getElementById(dpIds().input);
   if (input) {
     input.value = dateStr;
     input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -4253,25 +4467,30 @@ function selectDatePickerDate(dateStr) {
   closeDatePicker();
 }
 
-function openDatePicker() {
+function openDatePicker(target = 'f-date') {
+  if (datePickerOpen) closeDatePicker();
+  datePickerTarget = target;
   datePickerNavYear = null;
   datePickerNavMonth = null;
   refreshDatePickerBody();
-  document.getElementById('date-picker-popover')?.classList.add('is-open');
-  document.getElementById('btn-date-picker')?.setAttribute('aria-expanded', 'true');
+  const ids = dpIds();
+  document.getElementById(ids.popover)?.classList.add('is-open');
+  document.getElementById(ids.trigger)?.setAttribute('aria-expanded', 'true');
   datePickerOpen = true;
-  revealPopover(document.getElementById('date-picker-popover'));
+  revealPopover(document.getElementById(ids.popover));
 }
 
 function closeDatePicker() {
-  document.getElementById('date-picker-popover')?.classList.remove('is-open');
-  document.getElementById('btn-date-picker')?.setAttribute('aria-expanded', 'false');
+  const ids = dpIds();
+  document.getElementById(ids.popover)?.classList.remove('is-open');
+  document.getElementById(ids.trigger)?.setAttribute('aria-expanded', 'false');
   datePickerOpen = false;
 }
 
-function toggleDatePicker() {
-  if (datePickerOpen) closeDatePicker();
-  else openDatePicker();
+function toggleDatePicker(target = 'f-date') {
+  const t = typeof target === 'string' ? target : 'f-date';
+  if (datePickerOpen && datePickerTarget === t) closeDatePicker();
+  else openDatePicker(t);
 }
 
 // ---------------------------------------------------------------------
@@ -4569,8 +4788,8 @@ function initPickerGlobalListeners() {
     const path = typeof e.composedPath === 'function' ? e.composedPath() : [e.target];
 
     if (datePickerOpen) {
-      const popover = document.getElementById('date-picker-popover');
-      const trigger = document.getElementById('btn-date-picker');
+      const popover = document.getElementById(dpIds().popover);
+      const trigger = document.getElementById(dpIds().trigger);
       // Use composedPath() rather than e.target/.contains(): a click on a
       // month-nav button replaces #date-picker-body's innerHTML
       // synchronously (see navDatePicker), which detaches the clicked
@@ -4841,6 +5060,15 @@ function submitForm(event, ratesConfirmed = false) {
     document.getElementById('btn-job-picker')?.focus();
     return;
   }
+  // Daily overtime: the extra time needs its own rate before saving.
+  const otForSave = fixedCtx ? null : formOvertime(selectedFormJob(), workingMinutes - breakMinutes);
+  if (otForSave && formOvertimeRateValue() === null) {
+    state.formError = `This shift has ${calc.formatDuration(otForSave.overtime)} of overtime — enter the overtime rate for it.`;
+    const errorEl = document.getElementById('form-error');
+    if (errorEl) errorEl.textContent = state.formError;
+    document.getElementById('f-ot-rate')?.focus();
+    return;
+  }
   state.formError = '';
 
   // The ONLY place break time is applied: from here on, `workingMinutes`
@@ -4904,6 +5132,9 @@ function submitForm(event, ratesConfirmed = false) {
     data.weekendOverride = undefined;
     data.expectedRateAtEntry = undefined;
     data.expectedPaymentAtEntry = undefined;
+    data.overtimeMinutesAtEntry = undefined;
+    data.overtimeRateAtEntry = undefined;
+    data.overtimeAfterMinutesAtEntry = undefined;
   } else if (job) {
     const breakdown = calc.getRateBreakdown(jobWithFormAdditionalOverride(job), dateVal, currentFormOverride(), workingMinutes);
     data.fixedPayAtEntry = undefined;
@@ -4924,6 +5155,19 @@ function submitForm(event, ratesConfirmed = false) {
       // needed, the existing one already does the right thing.
       data.hourlyRate = breakdown.effectiveRate;
       data.paymentAmount = breakdown.payment;
+      const ot = formOvertime(job, workingMinutes);
+      const otRate = ot ? formOvertimeRateValue() : null;
+      if (ot && otRate !== null) {
+        data.overtimeMinutesAtEntry = ot.overtime;
+        data.overtimeRateAtEntry = otRate;
+        data.overtimeAfterMinutesAtEntry = ot.afterMinutes;
+        data.paymentAmount = calc.paymentWithOvertime(breakdown.effectiveRate, ot.normal, otRate, ot.overtime);
+        rememberOvertimeRate(job.id, otRate);
+      } else {
+        data.overtimeMinutesAtEntry = undefined;
+        data.overtimeRateAtEntry = undefined;
+        data.overtimeAfterMinutesAtEntry = undefined;
+      }
     } else {
       // Direct-payment mode + a job selected: the typed payment amount
       // remains the source of truth. The job only ever annotates it with
@@ -4931,6 +5175,9 @@ function submitForm(event, ratesConfirmed = false) {
       data.paymentAmount = Number(document.getElementById('f-pay').value) || 0;
       data.expectedRateAtEntry = breakdown.effectiveRate;
       data.expectedPaymentAtEntry = breakdown.payment;
+      data.overtimeMinutesAtEntry = undefined;
+      data.overtimeRateAtEntry = undefined;
+      data.overtimeAfterMinutesAtEntry = undefined;
     }
   } else {
     const hourlyInput = document.getElementById('f-hourly-rate');
@@ -4956,6 +5203,9 @@ function submitForm(event, ratesConfirmed = false) {
     data.expectedRateAtEntry = undefined;
     data.expectedPaymentAtEntry = undefined;
     data.fixedPayAtEntry = undefined;
+    data.overtimeMinutesAtEntry = undefined;
+    data.overtimeRateAtEntry = undefined;
+    data.overtimeAfterMinutesAtEntry = undefined;
   }
 
   if (state.editingId) {
@@ -5017,11 +5267,11 @@ function startEdit(id) {
   document.getElementById('form-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function deleteRecord(id) {
+async function deleteRecord(id) {
   const record = state.records.find((r) => r.id === id);
   if (!record) return;
   const label = `${calc.shortDateLabel(record.date)} (${calc.formatDuration(calc.recordMinutes(record))})`;
-  if (!confirm(`Delete the record for ${label}? This cannot be undone.`)) return;
+  if (!(await askConfirm('This cannot be undone.', { title: `Delete the record for ${label}?`, confirmLabel: 'Delete', danger: true }))) return;
   // Keep keyboard focus in the list: move it to the neighbouring record's
   // delete button (or the list heading when it was the last one).
   const shownIds = [...document.querySelectorAll('[data-action="delete"]')].filter(isVisible).map((b) => b.dataset.id);
@@ -5059,7 +5309,7 @@ function updateOptionField(field, list) {
   render();
 }
 
-function handleOptionAction(action, field, id) {
+async function handleOptionAction(action, field, id) {
   const list = state.settings[field];
   const recordField = field === 'dayTypes' ? 'dayType' : 'paymentType';
   const option = list.find((o) => o.id === id);
@@ -5070,7 +5320,7 @@ function handleOptionAction(action, field, id) {
   if (action === 'restore') return updateOptionField(field, opts.restoreOption(list, id));
 
   if (action === 'rename') {
-    const next = prompt('Rename option to:', option.label);
+    const next = await askText('New name for this option', option.label, { title: 'Rename option', confirmLabel: 'Rename', maxLength: 40 });
     if (next === null) return;
     const result = opts.renameOption(list, id, next);
     if (result.error) {
@@ -5079,7 +5329,7 @@ function handleOptionAction(action, field, id) {
     }
     const usage = opts.optionUsageCount(state.records, recordField, option.label);
     let records = state.records;
-    if (usage > 0 && confirm(`${usage} existing record${usage === 1 ? '' : 's'} currently show "${option.label}". Update ${usage === 1 ? 'it' : 'them'} to "${next.trim()}" as well?\n\nChoose Cancel to keep those records showing "${option.label}".`)) {
+    if (usage > 0 && (await askConfirm(`${usage} existing record${usage === 1 ? '' : 's'} currently show “${option.label}”. Update ${usage === 1 ? 'it' : 'them'} to “${next.trim()}” as well, or keep ${usage === 1 ? 'it' : 'them'} as ${usage === 1 ? 'it is' : 'they are'}?`, { title: 'Update existing records?', confirmLabel: `Update ${usage === 1 ? 'it' : 'them'}`, cancelLabel: 'Keep as is' }))) {
       const bulk = opts.bulkRenameRecords(records, recordField, option.label, next.trim());
       records = bulk.records;
     }
@@ -5093,18 +5343,28 @@ function handleOptionAction(action, field, id) {
   if (action === 'remove') {
     const usage = opts.optionUsageCount(state.records, recordField, option.label);
     if (usage > 0) {
-      if (confirm(`"${option.label}" is used by ${usage} record${usage === 1 ? '' : 's'}. It can't be deleted without losing that history, so it will be archived instead: it stays visible on existing records but won't be offered for new ones. Continue?`)) {
+      if (await askConfirm(`“${option.label}” is used by ${usage} record${usage === 1 ? '' : 's'}. It can't be deleted without losing that history, so it will be archived instead: it stays visible on existing records but won't be offered for new ones.`, { title: 'Archive this option?', confirmLabel: 'Archive' })) {
         updateOptionField(field, opts.archiveOption(list, id));
       }
       return;
     }
-    if (confirm(`Delete "${option.label}"? It isn't used by any records.`)) {
+    if (await askConfirm('It isn’t used by any records.', { title: `Delete “${option.label}”?`, confirmLabel: 'Delete', danger: true })) {
       updateOptionField(field, opts.removeOption(list, id));
     }
   }
 }
 
 // -- Settings: jobs -------------------------------------------------------
+
+/** Offer this overtime rate first next time (saved with the job's settings). */
+function rememberOvertimeRate(jobId, rate) {
+  const list = state.settings.jobs || [];
+  if (!list.some((j) => j.id === jobId)) return;
+  state.settings = {
+    ...state.settings,
+    jobs: list.map((j) => (j.id === jobId ? { ...j, overtime: calc.normalizeOvertime({ ...j.overtime, lastRate: rate }) } : j)),
+  };
+}
 
 function updateJobsList(list, message) {
   state.settings = { ...state.settings, jobs: list };
@@ -5113,7 +5373,7 @@ function updateJobsList(list, message) {
   render();
 }
 
-function handleJobAction(action, id) {
+async function handleJobAction(action, id) {
   const list = state.settings.jobs || [];
   if (action === 'edit') {
     state.jobEditingId = state.jobEditingId === id ? null : id;
@@ -5142,7 +5402,7 @@ function handleJobAction(action, id) {
       showToast(`“${job.name}” is used by a record now, so it can’t be deleted — archive it instead.`);
       return;
     }
-    if (!confirm(`Delete the job “${job.name}”? No records use it. Its pay settings are removed from this device and this cannot be undone.`)) return;
+    if (!(await askConfirm('No records use it. Its pay settings are removed from this device and this cannot be undone.', { title: `Delete the job “${job.name}”?`, confirmLabel: 'Delete job', danger: true }))) return;
     if (state.jobEditingId === id) state.jobEditingId = null;
     updateJobsList(next, `Job “${job.name}” deleted.`);
   }
@@ -5208,11 +5468,17 @@ function handleJobEditSubmit(id, event) {
     `je-add-${id}-type`, `je-add-${id}-value`,
     `je-notes-${id}`,
     `je-fx-${id}-amount`, `je-fx-${id}-start`, `je-fx-${id}-end`, `je-fx-${id}-break`,
+    `je-ot-${id}-h`, `je-ot-${id}-m`,
   ];
   const snapshot = snapshotJobFormFields(fieldIds);
   const editForm = document.querySelector(`form[data-job-edit-form][data-id="${CSS.escape(id)}"]`);
   const payCalculationMode = readJobFormMode(editForm);
   const fixedPay = readFixedPayFromForm(editForm, `je-fx-${id}`);
+  const otRead = readOvertimeFromForm(`je-ot-${id}`, jobs.findJob(state.settings.jobs, id)?.overtime);
+  if (otRead.error) {
+    showFormLevelJobError(otRead.error, `je-ot-${id}-h`);
+    return;
+  }
   const patch = {
     payCalculationMode,
     fixedPay,
@@ -5222,6 +5488,7 @@ function handleJobEditSubmit(id, event) {
     saturdayRule: readRuleFromForm(`je-sat-${id}`),
     sundayRule: readRuleFromForm(`je-sun-${id}`),
     additionalRule: readRuleFromForm(`je-add-${id}`),
+    overtime: otRead.overtime,
     notes: document.getElementById(`je-notes-${id}`).value.trim(),
   };
   const result = jobs.updateJob(state.settings.jobs, id, patch);
@@ -5393,6 +5660,7 @@ function handleAddJobSubmit(event) {
     'new-job-add-type', 'new-job-add-value',
     'new-job-notes',
     'new-job-fx-amount', 'new-job-fx-start', 'new-job-fx-end', 'new-job-fx-break',
+    'new-job-ot-h', 'new-job-ot-m',
   ];
   // (Add Job's rule-editor `id` args to ruleEditorRow already are
   // 'new-job-sat'/'new-job-sun'/'new-job-add' themselves, so the resulting
@@ -5411,7 +5679,12 @@ function handleAddJobSubmit(event) {
   const sundayRule = readRuleFromForm('new-job-sun');
   const additionalRule = readRuleFromForm('new-job-add');
   const notes = document.getElementById('new-job-notes').value.trim();
-  const result = jobs.addJob(state.settings.jobs, { name, employer, baseRate, payCalculationMode, fixedPay, saturdayRule, sundayRule, additionalRule, notes });
+  const otRead = readOvertimeFromForm('new-job-ot', null);
+  if (otRead.error) {
+    showFormLevelJobError(otRead.error, 'new-job-ot-h');
+    return;
+  }
+  const result = jobs.addJob(state.settings.jobs, { name, employer, baseRate, payCalculationMode, fixedPay, saturdayRule, sundayRule, additionalRule, overtime: otRead.overtime, notes });
   if (result.error) {
     showToast(result.error, 'error');
     // Job Setup validation must preserve entered values, not just report
@@ -5577,9 +5850,9 @@ async function handleJobExport(format, cycleKey, jobKey, visibility = state.sett
  *  with the same name on this device (created if it doesn't exist), using
  *  the same job-aware import as a single backup. Profiles that aren't in
  *  the file are left alone. */
-function importAllProfiles(fileProfiles, mode) {
+async function importAllProfiles(fileProfiles, mode) {
   const names = fileProfiles.map((p) => p.name).join(', ');
-  if (mode === 'replace' && !confirm(`Replace the records and settings of ${fileProfiles.length} profile(s) (${names}) with this file? Profiles with these names are overwritten and missing ones are created; other profiles are left alone. This cannot be undone — export a backup first if unsure.`)) return;
+  if (mode === 'replace' && !(await askConfirm(`Profiles with these names are overwritten and missing ones are created; other profiles are left alone. This cannot be undone — export a backup first if unsure.`, { title: `Replace ${fileProfiles.length} profile(s) (${names}) with this file?`, confirmLabel: 'Replace', danger: true }))) return;
   if (!persist()) return;
   const lines = [];
   let created = 0;
@@ -5632,7 +5905,7 @@ function handleImport(mode) {
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       // Import is all-or-nothing: if anything below fails, put the records
       // and settings back exactly as they were.
       const previousRecords = state.records;
@@ -5641,12 +5914,12 @@ function handleImport(mode) {
       try {
         const file = store.parseBackupFile(String(reader.result));
         if (file.kind === 'all') {
-          importAllProfiles(file.profiles, mode);
+          await importAllProfiles(file.profiles, mode);
           return;
         }
         const parsed = file.parsed;
         const into = hasProfiles() ? ` in ${activeProfile().name}` : '';
-        if (mode === 'replace' && !confirm(`Replace all ${state.records.length} current record(s)${into} with the ${parsed.records.length} record(s) in this file? This cannot be undone — export a backup first if unsure.`)) return;
+        if (mode === 'replace' && !(await askConfirm(`This cannot be undone — export a backup first if unsure.`, { title: `Replace all ${state.records.length} current record(s)${into} with the ${parsed.records.length} in this file?`, confirmLabel: 'Replace', danger: true }))) return;
         // Jobs in the file are created (or matched by name) automatically,
         // and imported settings are validated like stored ones — see
         // storage.js#importBackup.
@@ -5676,12 +5949,12 @@ function handleImport(mode) {
   input.click();
 }
 
-function clearAllRecords() {
+async function clearAllRecords() {
   if (!state.records.length) {
     showToast('There are no records to clear.');
     return;
   }
-  if (!confirm(`Delete all ${state.records.length} record(s) from this device? Export a backup first if you might want them later. This cannot be undone.`)) return;
+  if (!(await askConfirm('Export a backup first if you might want them later. This cannot be undone.', { title: `Delete all ${state.records.length} record(s) from this device?`, confirmLabel: 'Delete all', danger: true }))) return;
   state.records = [];
   persist();
   state.modal = null;
@@ -5802,6 +6075,7 @@ function wireSettingsContentEvents() {
     persist();
     render();
   });
+  document.getElementById('btn-s-cycle-start-date-date')?.addEventListener('click', () => toggleDatePicker('s-cycle-start-date'));
   document.getElementById('s-cycle-start-date')?.addEventListener('change', (e) => {
     const value = e.target.value;
     // Ignore half-typed or cleared dates; only a real date moves the cycles.
@@ -5862,6 +6136,13 @@ function wireSettingsContentEvents() {
   // rows' select-driven disabled state comes back in sync too, not just
   // their values — see ruleEditorRow/readRuleFromForm above.
   document.getElementById('btn-cancel-add-job')?.addEventListener('click', () => render());
+  document.querySelectorAll('[data-ot-toggle]').forEach((box) =>
+    box.addEventListener('change', () => {
+      const limit = document.getElementById(`${box.dataset.otToggle}-limit`);
+      if (limit) limit.hidden = !box.checked;
+      if (box.checked) document.getElementById(`${box.dataset.otToggle}-h`)?.focus();
+    })
+  );
   document.querySelectorAll('[data-job-mode]').forEach((input) =>
     input.addEventListener('change', () => {
       const form = input.closest('form');
@@ -6162,13 +6443,15 @@ function wireEvents() {
     updateLiveRate();
     updateJobAwareCalc();
   });
+  // Overtime box for the form as drawn (e.g. reopening a record with overtime).
+  if (document.getElementById('overtime-root')) updateJobAwareCalc();
   ['f-daytype', 'f-paytype'].forEach((id) =>
     document.getElementById(id)?.addEventListener('change', () => {
       formAdditionalOverrideMode = 'default';
       updateJobAwareCalc();
     })
   );
-  document.getElementById('btn-date-picker')?.addEventListener('click', toggleDatePicker);
+  document.getElementById('btn-date-picker')?.addEventListener('click', () => toggleDatePicker('f-date'));
   document.getElementById('btn-job-picker')?.addEventListener('click', toggleJobPicker);
   wireOptionPickers();
   document.getElementById('btn-job-picker')?.addEventListener('keydown', (e) => {
@@ -6407,6 +6690,7 @@ function initNativeApp() {
 /** Android back: close whatever is on top first, the way Escape does on a
  *  computer; only on the main screen does back leave the app. */
 function handleBackButton() {
+  if (cancelOpenDialog()) return;
   if (datePickerOpen || jobPickerOpen || timePickerOpen || optionPickerOpenId) {
     if (datePickerOpen) closeDatePicker();
     if (jobPickerOpen) closeJobPicker();

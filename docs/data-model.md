@@ -610,6 +610,29 @@ or `strong`. Per phone, not per profile, and **not** in backups (how a phone
 buzzes belongs to that phone). Missing or broken reads as the default (off).
 See `src/vibration.js`.
 
+## Overtime (daily limit, per job)
+
+Job field `overtime: { enabled, afterMinutes, lastRate }` — off by default,
+limit 480 min (8 h) by default, `lastRate` = the overtime $/hr last entered
+for this job (offered first next time; `null` until then). Only used for
+jobs paid by the hour. Changing it never reprices existing records
+(`jobs.payRulesChanged` ignores it).
+
+Records that went past the limit carry, alongside `paymentAmount`:
+`overtimeMinutesAtEntry` (minutes of this record that were overtime, ≤
+`workingMinutes`), `overtimeRateAtEntry` ($/hr entered) and
+`overtimeAfterMinutesAtEntry` (the limit in force). The split counts the
+same job's other records on that date (`calc.splitOvertime`). Pay =
+normal minutes × effective rate + overtime minutes × overtime rate
+(`calc.paymentWithOvertime`). Re-rating a job's records keeps each
+record's split and overtime rate; only the normal part follows the new
+rate. Invalid snapshot values are dropped on load/import.
+
+## Notification card (Android app only) — `localStorage["modern_work_hours_tracker_v1_notif_card"]`
+
+`"dismissed"` once "Not now" or "Allow" was tapped on the first-start
+"Allow notifications?" card. Per phone; not in backups.
+
 ## Android clock mirror (app only) — SharedPreferences `workroaster_clock`
 
 Not in `localStorage`: Android's private app preferences, so the "Clocked

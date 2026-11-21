@@ -107,6 +107,14 @@ export const GUIDE_SECTIONS = [
         body: `<p>There's no separate public-holiday rate. When a record's Day type or Payment type mentions <em>Public Holiday</em>, or its Payment type mentions <em>Overtime</em>, WorkRoaster asks whether to apply the job's <strong>additional loading</strong> before saving. Weekend shifts get a similar question for the Saturday/Sunday rule.</p>`,
       },
       {
+        title: 'Daily overtime limit',
+        keywords: 'overtime daily limit hours after 8 hours extra rate workplace rule',
+        body: `<p>For a job paid by the hour, turn on <strong>Count time over a daily limit as overtime</strong> when you add or edit the job, and set the limit your workplace uses — for example <em>8 hours</em>. You can switch it off again at any time.</p>
+          <p>When a record takes that job's time for the day past the limit (counting the job's other records on the same day), the Pay section shows how much is overtime and asks for the <strong>overtime rate</strong> for that extra time. Pay is then the normal time at the job's rate plus the overtime at your overtime rate. The rate you enter is remembered and offered next time.</p>
+          <p class="guide-formula">8h × $30.00 + 2h × $45.00 = $330.00</p>
+          <p>Each record keeps its own overtime and rate, so changing the limit later never changes records you've already saved.</p>`,
+      },
+      {
         title: 'Pay-cycle length is app-wide',
         keywords: 'pay cycle configuration per job fortnight',
         body: `<p>Jobs don't have their own pay-cycle settings — cycle length and start day are one setting for the whole profile (Settings → General). If a job is paid on a different cycle, give it its own profile. See <em>Pay cycles</em> and <em>Profiles</em>.</p>`,

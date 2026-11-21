@@ -203,6 +203,18 @@ function migrateRecord(record) {
   if (record.expectedPaymentAtEntry !== undefined && record.expectedPaymentAtEntry !== null && Number.isFinite(Number(record.expectedPaymentAtEntry))) {
     migrated.expectedPaymentAtEntry = Number(record.expectedPaymentAtEntry);
   }
+  // Daily overtime snapshot — only on hourly job records that went past
+  // the job's daily limit: how many of the record's minutes were overtime,
+  // the overtime rate entered for them and the limit in force. Kept with
+  // the record so a later change to the job never reprices it.
+  const otMinutes = Math.round(Number(record.overtimeMinutesAtEntry));
+  const otRate = Number(record.overtimeRateAtEntry);
+  if (Number.isFinite(otMinutes) && otMinutes > 0 && otMinutes <= migrated.workingMinutes && Number.isFinite(otRate) && otRate >= 0) {
+    migrated.overtimeMinutesAtEntry = otMinutes;
+    migrated.overtimeRateAtEntry = otRate;
+    const after = Math.round(Number(record.overtimeAfterMinutesAtEntry));
+    if (Number.isFinite(after) && after > 0 && after <= 24 * 60) migrated.overtimeAfterMinutesAtEntry = after;
+  }
   // Fixed-pay snapshot — only on records saved against a monthly/yearly
   // fixed-pay job: the salary configuration in force at entry time plus
   // the day's salary share it produced. Copied through as-is (normalized)

@@ -779,6 +779,47 @@ export function calculatePaymentFromEffectiveRate(effectiveRate, minutes) {
   return paymentFromHourlyRate(effectiveRate, minutes);
 }
 
+// ---------------------------------------------------------------------
+// Daily overtime (per job, optional) — see docs/data-model.md "Overtime".
+// A job can count time over a daily limit as overtime. When a record
+// takes that job's total for the day past the limit, the person enters
+// an overtime rate ($/hr) for the extra time; the record stores the split
+// and the rate, so later setting changes never reprice it.
+// ---------------------------------------------------------------------
+export const DEFAULT_OVERTIME_AFTER_MINUTES = 8 * 60;
+
+/** A complete, safe overtime setting for a job. */
+export function normalizeOvertime(raw) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  const after = Math.round(Number(src.afterMinutes));
+  const rate = Number(src.lastRate);
+  return {
+    enabled: src.enabled === true,
+    afterMinutes: Number.isFinite(after) && after > 0 && after <= 24 * 60 ? after : DEFAULT_OVERTIME_AFTER_MINUTES,
+    // The overtime rate used last time: offered first for the next record.
+    lastRate: src.lastRate !== null && src.lastRate !== undefined && src.lastRate !== '' && Number.isFinite(rate) && rate >= 0 ? roundCurrency(rate) : null,
+  };
+}
+
+/**
+ * How much of a record is overtime, given what the same job already has
+ * logged earlier that day.
+ *   splitOvertime(240, 300, 480) → { normal: 180, overtime: 60 }
+ */
+export function splitOvertime(recordMinutes, earlierMinutesSameDay, afterMinutes) {
+  const mins = Math.max(0, Math.round(Number(recordMinutes) || 0));
+  const earlier = Math.max(0, Math.round(Number(earlierMinutesSameDay) || 0));
+  const limit = Math.max(0, Math.round(Number(afterMinutes) || 0));
+  const roomLeft = Math.max(0, limit - earlier);
+  const overtime = Math.max(0, mins - roomLeft);
+  return { normal: mins - overtime, overtime };
+}
+
+/** Normal time at the effective rate + overtime at the overtime rate. */
+export function paymentWithOvertime(effectiveRate, normalMinutes, overtimeRate, overtimeMinutes) {
+  return roundCurrency(paymentFromHourlyRate(effectiveRate, normalMinutes) + paymentFromHourlyRate(overtimeRate, overtimeMinutes));
+}
+
 /**
  * One-stop breakdown assembler used by both the hourly-rate-mode rate
  * panel and the direct-payment-mode "expected vs actual" comparison —
